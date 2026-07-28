@@ -10,15 +10,13 @@ dependencies = [
     "photutils>=1.13",
     "scipy>=1.13",
     "torch>=2.2",
+    "astroquery>=0.4.7",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
-]
-astrometry = [
-    "astroquery>=0.4.7",
 ]
 
 [build-system]

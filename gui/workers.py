@@ -4,7 +4,13 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from core.alignment import RegisteredFrame, RegisteredStack, detect_stars, estimate_shift
+from core.alignment import RegisteredFrame, RegisteredStack, StarList, detect_stars, estimate_shift
+from core.astrometry import (
+    build_approx_wcs,
+    fit_astrometric_solution,
+    match_stars_to_gaia,
+    query_gaia_stars,
+)
 from core.detection import DetectionResult, detect_candidates
 from core.gpu_tracking import search_velocity_grid_torch
 from core.io_fits import FrameStack, find_fits_files, load_fits_frame
@@ -127,3 +133,65 @@ class DetectionWorker(QThread):
             self.failed.emit(str(exc))
             return
         self.finished_detection.emit(detections)
+
+
+class AstrometryWorker(QThread):
+    """Fragt Gaia nach Katalogsternen im Feld ab, matcht sie gegen erkannte Sterne im
+    Referenzframe und fittet eine verfeinerte WCS-Lösung."""
+
+    status = Signal(str)
+    finished_astrometry = Signal(object)
+    failed = Signal(str)
+
+    def __init__(
+        self,
+        reference_stars: StarList,
+        image_shape: tuple[int, int],
+        params: dict,
+        parent: QObject | None = None,
+    ):
+        super().__init__(parent)
+        self._reference_stars = reference_stars
+        self._image_shape = image_shape
+        self._params = params
+
+    def run(self) -> None:
+        try:
+            self.status.emit("Frage Gaia-Katalog ab ...")
+            gaia_stars = query_gaia_stars(
+                center_ra_deg=self._params["center_ra_deg"],
+                center_dec_deg=self._params["center_dec_deg"],
+                radius_deg=self._params["radius_deg"],
+                mag_limit=self._params["mag_limit"],
+            )
+            if len(gaia_stars) == 0:
+                self.failed.emit("Keine Gaia-Sterne im Suchradius gefunden.")
+                return
+
+            approx_wcs = build_approx_wcs(
+                self._params["center_ra_deg"],
+                self._params["center_dec_deg"],
+                self._params["pixel_scale_arcsec"],
+                self._image_shape,
+            )
+
+            self.status.emit("Matche erkannte Sterne gegen Gaia ...")
+            matches = match_stars_to_gaia(
+                self._reference_stars.x,
+                self._reference_stars.y,
+                approx_wcs,
+                gaia_stars,
+                max_separation_arcsec=self._params["max_separation_arcsec"],
+            )
+            if len(matches) < 3:
+                self.failed.emit(
+                    f"Nur {len(matches)} Gaia-Matches gefunden, mindestens 3 für WCS-Fit nötig."
+                )
+                return
+
+            self.status.emit("Fitte WCS-Lösung ...")
+            solution = fit_astrometric_solution(matches)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+            return
+        self.finished_astrometry.emit(solution)

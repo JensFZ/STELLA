@@ -3,12 +3,15 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QDockWidget, QFileDialog, QMainWindow, QMessageBox
 
 from core.alignment import RegisteredStack
+from core.astrometry import AstrometricSolution, estimate_field_center_and_scale, pixel_to_sky
 from core.detection import DetectionResult
 from core.io_fits import FrameStack
+from core.mpc_report import MPCObservation, write_mpc_report
+from gui.views.astrometry_setup import AstrometrySetupDialog
 from gui.views.image_viewer import ImageViewer
 from gui.views.results_table import ResultsTable
 from gui.views.search_setup import SearchSetupDialog
-from gui.workers import AlignmentWorker, DetectionWorker, FrameStackLoader
+from gui.workers import AlignmentWorker, AstrometryWorker, DetectionWorker, FrameStackLoader
 
 
 class MainWindow(QMainWindow):
@@ -20,8 +23,10 @@ class MainWindow(QMainWindow):
         self._loader: FrameStackLoader | None = None
         self._alignment_worker: AlignmentWorker | None = None
         self._detection_worker: DetectionWorker | None = None
+        self._astrometry_worker: AstrometryWorker | None = None
         self._stack: FrameStack | None = None
         self._registered: RegisteredStack | None = None
+        self._astrometric_solution: AstrometricSolution | None = None
         self.image_viewer = ImageViewer(self)
         self.setCentralWidget(self.image_viewer)
         self.statusBar()
@@ -60,6 +65,17 @@ class MainWindow(QMainWindow):
         self.detect_action.setEnabled(False)
         self.detect_action.triggered.connect(self._open_search_setup)
         project_menu.addAction(self.detect_action)
+
+        project_menu.addSeparator()
+        self.astrometry_action = QAction("Astrometrie berechnen...", self)
+        self.astrometry_action.setEnabled(False)
+        self.astrometry_action.triggered.connect(self._open_astrometry_setup)
+        project_menu.addAction(self.astrometry_action)
+
+        self.export_mpc_action = QAction("MPC-Report exportieren...", self)
+        self.export_mpc_action.setEnabled(False)
+        self.export_mpc_action.triggered.connect(self._export_mpc_report)
+        project_menu.addAction(self.export_mpc_action)
 
         help_menu = menu_bar.addMenu("&Hilfe")
         about_action = QAction("Über STELLA", self)
@@ -118,6 +134,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.set_registered_stack(registered)
         self.align_action.setEnabled(True)
         self.detect_action.setEnabled(True)
+        self.astrometry_action.setEnabled(True)
         self.statusBar().showMessage("Ausrichtung abgeschlossen.", 5000)
 
     def _on_align_failed(self, message: str) -> None:
@@ -155,3 +172,83 @@ class MainWindow(QMainWindow):
         self.detect_action.setEnabled(True)
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler bei der Kandidatensuche", message)
+
+    def _open_astrometry_setup(self) -> None:
+        if self._registered is None:
+            return
+        reference_index = self._registered.reference_index
+        reference_frame = self._registered[reference_index].frame
+        prefill = estimate_field_center_and_scale(reference_frame.wcs, reference_frame.data.shape)
+
+        dialog = AstrometrySetupDialog(self, prefill=prefill)
+        if dialog.exec() != AstrometrySetupDialog.DialogCode.Accepted:
+            return
+
+        reference_stars = self._registered[reference_index].stars
+        self._astrometry_worker = AstrometryWorker(
+            reference_stars, reference_frame.data.shape, dialog.parameters(), parent=self
+        )
+        self._astrometry_worker.status.connect(self._on_astrometry_status)
+        self._astrometry_worker.finished_astrometry.connect(self._on_astrometry_finished)
+        self._astrometry_worker.failed.connect(self._on_astrometry_failed)
+        self.astrometry_action.setEnabled(False)
+        self.statusBar().showMessage("Astrometrie wird berechnet ...")
+        self._astrometry_worker.start()
+
+    def _on_astrometry_status(self, message: str) -> None:
+        self.statusBar().showMessage(message)
+
+    def _on_astrometry_finished(self, solution: AstrometricSolution) -> None:
+        self._astrometric_solution = solution
+        self.astrometry_action.setEnabled(True)
+        self.export_mpc_action.setEnabled(True)
+        self.statusBar().showMessage(
+            f"Astrometrie: {solution.n_matches} Gaia-Matches, "
+            f"RMS-Residuum {solution.rms_residual_arcsec:.3f}\"",
+            8000,
+        )
+        QMessageBox.information(
+            self,
+            "Astrometrie berechnet",
+            f"{solution.n_matches} Sterne gegen Gaia gematcht.\n"
+            f"RMS-Residuum des WCS-Fits: {solution.rms_residual_arcsec:.3f} arcsec",
+        )
+
+    def _on_astrometry_failed(self, message: str) -> None:
+        self.astrometry_action.setEnabled(True)
+        self.statusBar().clearMessage()
+        QMessageBox.critical(self, "Fehler bei der Astrometrie", message)
+
+    def _export_mpc_report(self) -> None:
+        if self._astrometric_solution is None or self._registered is None:
+            return
+        confirmed = [d for d in self.results_table.detections() if d.confirmed is True]
+        if not confirmed:
+            QMessageBox.warning(
+                self,
+                "Keine bestätigten Kandidaten",
+                "Bitte zunächst mindestens einen Kandidaten in der Tabelle als "
+                '"Bestätigt" markieren.',
+            )
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "MPC-Report speichern", "report.txt", "Textdateien (*.txt)"
+        )
+        if not path:
+            return
+
+        reference_time = self._registered[self._registered.reference_index].frame.obs_time
+        observations = []
+        for detection in confirmed:
+            ra_deg, dec_deg = pixel_to_sky(
+                self._astrometric_solution.wcs, detection.position[0], detection.position[1]
+            )
+            observations.append(
+                MPCObservation(ra_deg=ra_deg, dec_deg=dec_deg, obs_time=reference_time)
+            )
+
+        write_mpc_report(observations, path)
+        self.statusBar().showMessage(
+            f"MPC-Report mit {len(observations)} Beobachtung(en) gespeichert.", 5000
+        )

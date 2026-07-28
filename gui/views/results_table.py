@@ -87,3 +87,6 @@ class ResultsTable(QWidget):
 
     def _on_status_changed(self, detection: DetectionResult, index: int) -> None:
         detection.confirmed = STATUS_TO_CONFIRMED[index]
+
+    def detections(self) -> list[DetectionResult]:
+        return list(self._detections)
