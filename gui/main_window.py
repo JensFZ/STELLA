@@ -9,7 +9,7 @@ from gui.workers import FrameStackLoader
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Synthetic Tracker")
+        self.setWindowTitle("STELLA")
         self.resize(1200, 800)
 
         self._loader: FrameStackLoader | None = None
@@ -37,15 +37,16 @@ class MainWindow(QMainWindow):
         project_menu.addAction(QAction("Projekt öffnen...", self))
 
         help_menu = menu_bar.addMenu("&Hilfe")
-        about_action = QAction("Über Synthetic Tracker", self)
+        about_action = QAction("Über STELLA", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
     def _show_about(self) -> None:
         QMessageBox.about(
             self,
-            "Über Synthetic Tracker",
-            "Synthetic Tracker\nOpen-Source Synthetic-Tracking-Tool für Asteroiden-Detektion.",
+            "Über STELLA",
+            "STELLA — Synthetic Tracking Engine for Locating & Logging Asteroids\n"
+            "Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion.",
         )
 
     def _open_fits_folder(self) -> None:

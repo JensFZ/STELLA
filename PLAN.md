@@ -1,4 +1,4 @@
-# Entwicklungsplan: Open-Source Synthetic-Tracking-Tool (Tycho-Tracker-Alternative)
+# Entwicklungsplan: STELLA — Synthetic Tracking Engine for Locating & Logging Asteroids (Tycho-Tracker-Alternative)
 
 > Dieses Dokument ist als Arbeitsauftrag für Claude Code gedacht. Es beschreibt Ziel, Architektur,
 > Tech-Stack-Entscheidung und ein phasenweises Vorgehen. Claude Code soll dieses Dokument als
@@ -37,7 +37,7 @@ erheblich. Für dieses Projekt wird Python empfohlen.
 ## 3. Architektur (Module)
 
 ```
-synthetic-tracker/
+stella/
 ├── core/
 │   ├── io_fits.py          # FITS laden, Header/WCS parsen, Bildstapel-Objekt
 │   ├── alignment.py        # Sternfeld-Registrierung (Referenzframe-Alignment)
