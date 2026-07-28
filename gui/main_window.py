@@ -1,10 +1,14 @@
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QDockWidget, QFileDialog, QMainWindow, QMessageBox
 
 from core.alignment import RegisteredStack
+from core.detection import DetectionResult
 from core.io_fits import FrameStack
 from gui.views.image_viewer import ImageViewer
-from gui.workers import AlignmentWorker, FrameStackLoader
+from gui.views.results_table import ResultsTable
+from gui.views.search_setup import SearchSetupDialog
+from gui.workers import AlignmentWorker, DetectionWorker, FrameStackLoader
 
 
 class MainWindow(QMainWindow):
@@ -15,10 +19,18 @@ class MainWindow(QMainWindow):
 
         self._loader: FrameStackLoader | None = None
         self._alignment_worker: AlignmentWorker | None = None
+        self._detection_worker: DetectionWorker | None = None
         self._stack: FrameStack | None = None
+        self._registered: RegisteredStack | None = None
         self.image_viewer = ImageViewer(self)
         self.setCentralWidget(self.image_viewer)
         self.statusBar()
+
+        self.results_table = ResultsTable(self)
+        self.results_dock = QDockWidget("Kandidaten", self)
+        self.results_dock.setWidget(self.results_table)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.results_dock)
+        self.results_dock.hide()
 
         self._build_menu()
 
@@ -43,6 +55,11 @@ class MainWindow(QMainWindow):
         self.align_action.setEnabled(False)
         self.align_action.triggered.connect(self._run_alignment)
         project_menu.addAction(self.align_action)
+
+        self.detect_action = QAction("Kandidaten suchen...", self)
+        self.detect_action.setEnabled(False)
+        self.detect_action.triggered.connect(self._open_search_setup)
+        project_menu.addAction(self.detect_action)
 
         help_menu = menu_bar.addMenu("&Hilfe")
         about_action = QAction("Über STELLA", self)
@@ -97,11 +114,44 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Sternerkennung: Frame {current} / {total} ...")
 
     def _on_align_finished(self, registered: RegisteredStack) -> None:
+        self._registered = registered
         self.image_viewer.set_registered_stack(registered)
         self.align_action.setEnabled(True)
+        self.detect_action.setEnabled(True)
         self.statusBar().showMessage("Ausrichtung abgeschlossen.", 5000)
 
     def _on_align_failed(self, message: str) -> None:
         self.align_action.setEnabled(True)
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler bei der Ausrichtung", message)
+
+    def _open_search_setup(self) -> None:
+        if self._stack is None or self._registered is None:
+            return
+        dialog = SearchSetupDialog(self)
+        if dialog.exec() != SearchSetupDialog.DialogCode.Accepted:
+            return
+
+        self._detection_worker = DetectionWorker(
+            self._stack, self._registered, dialog.parameters(), parent=self
+        )
+        self._detection_worker.status.connect(self._on_detect_status)
+        self._detection_worker.finished_detection.connect(self._on_detect_finished)
+        self._detection_worker.failed.connect(self._on_detect_failed)
+        self.detect_action.setEnabled(False)
+        self.statusBar().showMessage("Suche wird vorbereitet ...")
+        self._detection_worker.start()
+
+    def _on_detect_status(self, message: str) -> None:
+        self.statusBar().showMessage(message)
+
+    def _on_detect_finished(self, detections: list[DetectionResult]) -> None:
+        self.results_table.set_detections(detections)
+        self.results_dock.show()
+        self.detect_action.setEnabled(True)
+        self.statusBar().showMessage(f"{len(detections)} Kandidat(en) gefunden.", 5000)
+
+    def _on_detect_failed(self, message: str) -> None:
+        self.detect_action.setEnabled(True)
+        self.statusBar().clearMessage()
+        QMessageBox.critical(self, "Fehler bei der Kandidatensuche", message)

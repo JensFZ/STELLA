@@ -5,7 +5,10 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QThread, Signal
 
 from core.alignment import RegisteredFrame, RegisteredStack, detect_stars, estimate_shift
+from core.detection import DetectionResult, detect_candidates
+from core.gpu_tracking import search_velocity_grid_torch
 from core.io_fits import FrameStack, find_fits_files, load_fits_frame
+from core.synthetic_tracking import build_velocity_grid, search_velocity_grid
 
 
 class FrameStackLoader(QThread):
@@ -77,3 +80,50 @@ class AlignmentWorker(QThread):
         self.finished_alignment.emit(
             RegisteredStack(reference_index=self._reference_index, frames=registered)
         )
+
+
+class DetectionWorker(QThread):
+    """Durchsucht das Vektor-Gitter (CPU oder PyTorch-Batch) und gruppiert die SNR-Peaks zu
+    einer Kandidatenliste."""
+
+    status = Signal(str)
+    finished_detection = Signal(list)
+    failed = Signal(str)
+
+    def __init__(
+        self,
+        stack: FrameStack,
+        registered: RegisteredStack,
+        params: dict,
+        parent: QObject | None = None,
+    ):
+        super().__init__(parent)
+        self._stack = stack
+        self._registered = registered
+        self._params = params
+
+    def run(self) -> None:
+        try:
+            grid = build_velocity_grid(
+                speed_range_arcsec_per_min=self._params["speed_range_arcsec_per_min"],
+                speed_step_arcsec_per_min=self._params["speed_step_arcsec_per_min"],
+                angle_step_deg=self._params["angle_step_deg"],
+            )
+            self.status.emit(f"Durchsuche {len(grid)} Bewegungsvektoren ...")
+
+            pixel_scale = self._params["pixel_scale_arcsec"]
+            if self._params["use_gpu"]:
+                results = search_velocity_grid_torch(
+                    self._stack, self._registered, grid, pixel_scale
+                )
+            else:
+                results = search_velocity_grid(self._stack, self._registered, grid, pixel_scale)
+
+            self.status.emit("Gruppiere Treffer ...")
+            detections: list[DetectionResult] = detect_candidates(
+                results, snr_threshold=self._params["snr_threshold"]
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+            return
+        self.finished_detection.emit(detections)
