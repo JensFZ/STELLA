@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QImage, QPainter, QPixmap, QWheelEvent
+from PySide6.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QDoubleSpinBox,
+    QGraphicsEllipseItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
@@ -18,7 +19,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.alignment import RegisteredStack
 from core.io_fits import FrameStack, make_thumbnail, stretch_to_uint8
+
+STAR_MARKER_RADIUS = 6
+STAR_MARKER_COLOR = Qt.GlobalColor.red
 
 THUMBNAIL_SIZE = 96
 BLINK_INTERVAL_MS = 400
@@ -49,6 +54,7 @@ class ImageViewer(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._stack: FrameStack | None = None
+        self._registered: RegisteredStack | None = None
         self._index = 0
         self._blink_timer = QTimer(self)
         self._blink_timer.timeout.connect(self._blink_tick)
@@ -58,6 +64,7 @@ class ImageViewer(QWidget):
         self.scene = QGraphicsScene(self)
         self.view = ZoomableGraphicsView(self.scene, self)
         self._pixmap_item: QGraphicsPixmapItem | None = None
+        self._star_items: list[QGraphicsEllipseItem] = []
 
         self.thumbnail_list = QListWidget(self)
         self.thumbnail_list.setViewMode(QListWidget.ViewMode.IconMode)
@@ -93,10 +100,16 @@ class ImageViewer(QWidget):
         self.blink_button.setCheckable(True)
         self.blink_button.toggled.connect(self._toggle_blink)
 
+        self.star_overlay_button = QPushButton("Sterne anzeigen", self)
+        self.star_overlay_button.setCheckable(True)
+        self.star_overlay_button.setEnabled(False)
+        self.star_overlay_button.toggled.connect(self._update_display)
+
         controls = QHBoxLayout()
         controls.addWidget(self.low_pct_spin)
         controls.addWidget(self.high_pct_spin)
         controls.addWidget(self.blink_button)
+        controls.addWidget(self.star_overlay_button)
         controls.addStretch(1)
 
         nav = QHBoxLayout()
@@ -123,8 +136,11 @@ class ImageViewer(QWidget):
 
     def set_stack(self, stack: FrameStack) -> None:
         self._stack = stack
+        self._registered = None
         self._index = 0
         self.blink_button.setChecked(False)
+        self.star_overlay_button.setChecked(False)
+        self.star_overlay_button.setEnabled(False)
 
         self.thumbnail_list.blockSignals(True)
         self.thumbnail_list.clear()
@@ -148,6 +164,12 @@ class ImageViewer(QWidget):
             self._update_display()
         else:
             self.frame_label.setText("Keine Frames gefunden")
+
+    def set_registered_stack(self, registered: RegisteredStack) -> None:
+        self._registered = registered
+        self.star_overlay_button.setEnabled(True)
+        self.star_overlay_button.setChecked(True)
+        self._update_display()
 
     def set_frame_index(self, index: int) -> None:
         if self._stack is None or not (0 <= index < len(self._stack)):
@@ -181,7 +203,38 @@ class ImageViewer(QWidget):
             self._pixmap_item.setPixmap(pixmap)
         self.scene.setSceneRect(self._pixmap_item.boundingRect())
 
-        self.frame_label.setText(f"{index + 1} / {len(self._stack)} — {frame.path.name}")
+        self._update_star_overlay(index)
+
+        label = f"{index + 1} / {len(self._stack)} — {frame.path.name}"
+        if self._registered is not None:
+            registered_frame = self._registered[index]
+            alignment = registered_frame.alignment
+            label += (
+                f" — Δx={alignment.dx:+.1f}px Δy={alignment.dy:+.1f}px"
+                f" ({alignment.n_matches} Sterne gematcht)"
+            )
+        self.frame_label.setText(label)
+
+    def _update_star_overlay(self, index: int) -> None:
+        for item in self._star_items:
+            self.scene.removeItem(item)
+        self._star_items.clear()
+
+        if self._registered is None or not self.star_overlay_button.isChecked():
+            return
+
+        pen = QPen(STAR_MARKER_COLOR)
+        pen.setWidth(0)
+        stars = self._registered[index].stars
+        for star_x, star_y in zip(stars.x, stars.y, strict=True):
+            item = self.scene.addEllipse(
+                star_x - STAR_MARKER_RADIUS,
+                star_y - STAR_MARKER_RADIUS,
+                2 * STAR_MARKER_RADIUS,
+                2 * STAR_MARKER_RADIUS,
+                pen,
+            )
+            self._star_items.append(item)
 
     def _toggle_blink(self, checked: bool) -> None:
         if self._stack is None or len(self._stack) < 2:

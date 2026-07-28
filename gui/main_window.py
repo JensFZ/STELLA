@@ -1,9 +1,10 @@
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 
+from core.alignment import RegisteredStack
 from core.io_fits import FrameStack
 from gui.views.image_viewer import ImageViewer
-from gui.workers import FrameStackLoader
+from gui.workers import AlignmentWorker, FrameStackLoader
 
 
 class MainWindow(QMainWindow):
@@ -13,6 +14,8 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self._loader: FrameStackLoader | None = None
+        self._alignment_worker: AlignmentWorker | None = None
+        self._stack: FrameStack | None = None
         self.image_viewer = ImageViewer(self)
         self.setCentralWidget(self.image_viewer)
         self.statusBar()
@@ -35,6 +38,11 @@ class MainWindow(QMainWindow):
         project_menu = menu_bar.addMenu("&Projekt")
         project_menu.addAction(QAction("Neues Projekt...", self))
         project_menu.addAction(QAction("Projekt öffnen...", self))
+        project_menu.addSeparator()
+        self.align_action = QAction("Sterne erkennen && ausrichten...", self)
+        self.align_action.setEnabled(False)
+        self.align_action.triggered.connect(self._run_alignment)
+        project_menu.addAction(self.align_action)
 
         help_menu = menu_bar.addMenu("&Hilfe")
         about_action = QAction("Über STELLA", self)
@@ -65,9 +73,35 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Lade Frame {current} / {total} ...")
 
     def _on_load_finished(self, stack: FrameStack) -> None:
+        self._stack = stack
         self.image_viewer.set_stack(stack)
+        self.align_action.setEnabled(len(stack) > 1)
         self.statusBar().showMessage(f"{len(stack)} Frames geladen.", 5000)
 
     def _on_load_failed(self, message: str) -> None:
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler beim Laden", message)
+
+    def _run_alignment(self) -> None:
+        if self._stack is None:
+            return
+        self._alignment_worker = AlignmentWorker(self._stack, reference_index=0, parent=self)
+        self._alignment_worker.progress.connect(self._on_align_progress)
+        self._alignment_worker.finished_alignment.connect(self._on_align_finished)
+        self._alignment_worker.failed.connect(self._on_align_failed)
+        self.statusBar().showMessage("Erkenne Sterne und richte Frames aus ...")
+        self.align_action.setEnabled(False)
+        self._alignment_worker.start()
+
+    def _on_align_progress(self, current: int, total: int) -> None:
+        self.statusBar().showMessage(f"Sternerkennung: Frame {current} / {total} ...")
+
+    def _on_align_finished(self, registered: RegisteredStack) -> None:
+        self.image_viewer.set_registered_stack(registered)
+        self.align_action.setEnabled(True)
+        self.statusBar().showMessage("Ausrichtung abgeschlossen.", 5000)
+
+    def _on_align_failed(self, message: str) -> None:
+        self.align_action.setEnabled(True)
+        self.statusBar().clearMessage()
+        QMessageBox.critical(self, "Fehler bei der Ausrichtung", message)
