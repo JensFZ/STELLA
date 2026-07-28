@@ -1,0 +1,40 @@
+[project]
+name = "synthetic-tracker"
+version = "0.1.0"
+description = "Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion (Tycho-Tracker-Alternative)"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6",
+    "astropy>=6.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+astrometry = [
+    "astroquery>=0.4.7",
+    "photutils>=1.13",
+]
+gpu = [
+    "torch>=2.2",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "gui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
