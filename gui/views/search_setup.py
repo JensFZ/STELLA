@@ -2,24 +2,36 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from core.gpu_tracking import get_device
+from core.project import ProjectStore
+
+PRESET_KIND = "search"
 
 
 class SearchSetupDialog(QDialog):
-    """Parameter für das Vektor-Gitter (Geschwindigkeit/Winkel) und die GPU-Auswahl."""
+    """Parameter für das Vektor-Gitter (Geschwindigkeit/Winkel) und die GPU-Auswahl.
 
-    def __init__(self, parent: QWidget | None = None):
+    Wird ein `project_store` übergeben, können die aktuellen Parameter als benannter Preset
+    gespeichert bzw. ein zuvor gespeicherter Preset geladen werden (PLAN.md Phase 7)."""
+
+    def __init__(self, parent: QWidget | None = None, project_store: ProjectStore | None = None):
         super().__init__(parent)
         self.setWindowTitle("Kandidaten suchen")
+        self._project_store = project_store
 
         self.pixel_scale_spin = QDoubleSpinBox(self)
         self.pixel_scale_spin.setRange(0.001, 100.0)
@@ -71,8 +83,53 @@ class SearchSetupDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
+        if project_store is not None:
+            layout.addLayout(self._build_preset_bar())
         layout.addLayout(form)
         layout.addWidget(buttons)
+
+    def _build_preset_bar(self) -> QHBoxLayout:
+        self.preset_combo = QComboBox(self)
+        self._reload_presets()
+
+        load_button = QPushButton("Laden", self)
+        load_button.clicked.connect(self._load_selected_preset)
+        save_button = QPushButton("Speichern als...", self)
+        save_button.clicked.connect(self._save_as_preset)
+
+        bar = QHBoxLayout()
+        bar.addWidget(QLabel("Preset:", self))
+        bar.addWidget(self.preset_combo, stretch=1)
+        bar.addWidget(load_button)
+        bar.addWidget(save_button)
+        return bar
+
+    def _reload_presets(self) -> None:
+        self.preset_combo.clear()
+        for preset in self._project_store.list_presets(PRESET_KIND):
+            self.preset_combo.addItem(preset.name, preset.params)
+
+    def _load_selected_preset(self) -> None:
+        params = self.preset_combo.currentData()
+        if params is None:
+            return
+        self.pixel_scale_spin.setValue(params["pixel_scale_arcsec"])
+        speed_low, speed_high = params["speed_range_arcsec_per_min"]
+        self.speed_min_spin.setValue(speed_low)
+        self.speed_max_spin.setValue(speed_high)
+        self.speed_step_spin.setValue(params["speed_step_arcsec_per_min"])
+        self.angle_step_spin.setValue(params["angle_step_deg"])
+        self.snr_threshold_spin.setValue(params["snr_threshold"])
+        self.use_gpu_checkbox.setChecked(params["use_gpu"])
+
+    def _save_as_preset(self) -> None:
+        name, ok = QInputDialog.getText(self, "Preset speichern", "Name:")
+        if not ok or not name.strip():
+            return
+        self._project_store.save_preset(name.strip(), PRESET_KIND, self.parameters())
+        self._reload_presets()
+        self.preset_combo.setCurrentText(name.strip())
+        QMessageBox.information(self, "Preset gespeichert", f'Preset "{name.strip()}" gespeichert.')
 
     def parameters(self) -> dict:
         return {

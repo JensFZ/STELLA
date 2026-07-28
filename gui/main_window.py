@@ -1,14 +1,22 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QDockWidget, QFileDialog, QMainWindow, QMessageBox
+from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtWidgets import (
+    QDockWidget,
+    QFileDialog,
+    QInputDialog,
+    QMainWindow,
+    QMessageBox,
+)
 
 from core.alignment import RegisteredStack
 from core.astrometry import AstrometricSolution, estimate_field_center_and_scale, pixel_to_sky
 from core.detection import DetectionResult
 from core.io_fits import FrameStack
 from core.mpc_report import MPCObservation, write_mpc_report
+from core.project import Project, ProjectStore
 from gui.views.astrometry_setup import AstrometrySetupDialog
 from gui.views.image_viewer import ImageViewer
+from gui.views.project_dialog import OpenProjectDialog
 from gui.views.results_table import ResultsTable
 from gui.views.search_setup import SearchSetupDialog
 from gui.workers import AlignmentWorker, AstrometryWorker, DetectionWorker, FrameStackLoader
@@ -27,6 +35,9 @@ class MainWindow(QMainWindow):
         self._stack: FrameStack | None = None
         self._registered: RegisteredStack | None = None
         self._astrometric_solution: AstrometricSolution | None = None
+        self._project_store: ProjectStore | None = None
+        self._current_project: Project | None = None
+        self._restore_project_on_load: Project | None = None
         self.image_viewer = ImageViewer(self)
         self.setCentralWidget(self.image_viewer)
         self.statusBar()
@@ -53,8 +64,18 @@ class MainWindow(QMainWindow):
         file_menu.addAction(exit_action)
 
         project_menu = menu_bar.addMenu("&Projekt")
-        project_menu.addAction(QAction("Neues Projekt...", self))
-        project_menu.addAction(QAction("Projekt öffnen...", self))
+        new_project_action = QAction("Neues Projekt...", self)
+        new_project_action.triggered.connect(self._new_project)
+        project_menu.addAction(new_project_action)
+
+        open_project_action = QAction("Projekt öffnen...", self)
+        open_project_action.triggered.connect(self._open_project)
+        project_menu.addAction(open_project_action)
+
+        self.save_session_action = QAction("Sitzung speichern", self)
+        self.save_session_action.setEnabled(False)
+        self.save_session_action.triggered.connect(self._save_session)
+        project_menu.addAction(self.save_session_action)
         project_menu.addSeparator()
         self.align_action = QAction("Sterne erkennen && ausrichten...", self)
         self.align_action.setEnabled(False)
@@ -94,7 +115,9 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "FITS-Ordner öffnen")
         if not folder:
             return
+        self._load_folder(folder)
 
+    def _load_folder(self, folder: str) -> None:
         self._loader = FrameStackLoader(folder, self)
         self._loader.progress.connect(self._on_load_progress)
         self._loader.finished_loading.connect(self._on_load_finished)
@@ -110,6 +133,19 @@ class MainWindow(QMainWindow):
         self.image_viewer.set_stack(stack)
         self.align_action.setEnabled(len(stack) > 1)
         self.statusBar().showMessage(f"{len(stack)} Frames geladen.", 5000)
+
+        if self._restore_project_on_load is not None:
+            project = self._restore_project_on_load
+            self._restore_project_on_load = None
+            detections = self._get_project_store().load_detections(project.id)
+            if detections:
+                self.results_table.set_detections(detections)
+                self.results_dock.show()
+                self.statusBar().showMessage(
+                    f"{len(stack)} Frames geladen, {len(detections)} gespeicherte "
+                    "Kandidat(en) wiederhergestellt.",
+                    5000,
+                )
 
     def _on_load_failed(self, message: str) -> None:
         self.statusBar().clearMessage()
@@ -145,7 +181,7 @@ class MainWindow(QMainWindow):
     def _open_search_setup(self) -> None:
         if self._stack is None or self._registered is None:
             return
-        dialog = SearchSetupDialog(self)
+        dialog = SearchSetupDialog(self, project_store=self._get_project_store())
         if dialog.exec() != SearchSetupDialog.DialogCode.Accepted:
             return
 
@@ -252,3 +288,48 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"MPC-Report mit {len(observations)} Beobachtung(en) gespeichert.", 5000
         )
+
+    def _get_project_store(self) -> ProjectStore:
+        if self._project_store is None:
+            self._project_store = ProjectStore()
+        return self._project_store
+
+    def _new_project(self) -> None:
+        name, ok = QInputDialog.getText(self, "Neues Projekt", "Projektname:")
+        if not ok or not name.strip():
+            return
+        folder = QFileDialog.getExistingDirectory(self, "FITS-Ordner öffnen")
+        if not folder:
+            return
+
+        self._current_project = self._get_project_store().create_project(name.strip(), folder)
+        self.save_session_action.setEnabled(True)
+        self.setWindowTitle(f"STELLA — {self._current_project.name}")
+        self._load_folder(folder)
+
+    def _open_project(self) -> None:
+        dialog = OpenProjectDialog(self, self._get_project_store())
+        if dialog.exec() != OpenProjectDialog.DialogCode.Accepted:
+            return
+        project = dialog.selected_project()
+        if project is None:
+            return
+
+        self._current_project = project
+        self.save_session_action.setEnabled(True)
+        self.setWindowTitle(f"STELLA — {project.name}")
+        self._restore_project_on_load = project
+        self._load_folder(project.fits_folder)
+
+    def _save_session(self) -> None:
+        if self._current_project is None:
+            return
+        self._get_project_store().save_detections(
+            self._current_project.id, self.results_table.detections()
+        )
+        self.statusBar().showMessage(f"Sitzung „{self._current_project.name}“ gespeichert.", 5000)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._project_store is not None:
+            self._project_store.close()
+        super().closeEvent(event)
