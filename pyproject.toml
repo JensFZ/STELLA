@@ -9,6 +9,7 @@ dependencies = [
     "numpy>=1.26",
     "photutils>=1.13",
     "scipy>=1.13",
+    "torch>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -18,9 +19,6 @@ dev = [
 ]
 astrometry = [
     "astroquery>=0.4.7",
-]
-gpu = [
-    "torch>=2.2",
 ]
 
 [build-system]

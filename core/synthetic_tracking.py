@@ -62,6 +62,27 @@ def _vector_pixel_shift(
     return dx, dy
 
 
+def per_frame_total_shifts(
+    stack: FrameStack,
+    registered: RegisteredStack,
+    vector: VelocityVector,
+    pixel_scale_arcsec: float,
+) -> list[tuple[float, float]]:
+    """Kombinierte (Stern-Alignment- + hypothetische Objektbewegungs-)Verschiebung (dx, dy)
+    pro Frame, relativ zum Referenzframe."""
+    reference_index = registered.reference_index
+    obs_times = [frame.obs_time for frame in stack.frames]
+    elapsed = frame_elapsed_minutes(obs_times, reference_index)
+
+    shifts = []
+    for index in range(len(stack.frames)):
+        star_dx = registered[index].alignment.dx
+        star_dy = registered[index].alignment.dy
+        obj_dx, obj_dy = _vector_pixel_shift(vector, elapsed[index], pixel_scale_arcsec)
+        shifts.append((star_dx + obj_dx, star_dy + obj_dy))
+    return shifts
+
+
 def shift_and_stack(
     stack: FrameStack,
     registered: RegisteredStack,
@@ -73,19 +94,11 @@ def shift_and_stack(
     Ein Objekt, das sich tatsächlich mit `vector` bewegt hat, addiert sich dadurch
     konstruktiv; alles andere (Sterne, Rauschen) verschmiert."""
     reference_index = registered.reference_index
-    obs_times = [frame.obs_time for frame in stack.frames]
-    elapsed = frame_elapsed_minutes(obs_times, reference_index)
-
     reference_shape = stack.frames[reference_index].data.shape
     accum = np.zeros(reference_shape, dtype=np.float64)
 
-    for index, frame in enumerate(stack.frames):
-        star_dx = registered[index].alignment.dx
-        star_dy = registered[index].alignment.dy
-        obj_dx, obj_dy = _vector_pixel_shift(vector, elapsed[index], pixel_scale_arcsec)
-        total_dx = star_dx + obj_dx
-        total_dy = star_dy + obj_dy
-
+    shifts = per_frame_total_shifts(stack, registered, vector, pixel_scale_arcsec)
+    for frame, (total_dx, total_dy) in zip(stack.frames, shifts, strict=True):
         # Ein Objekt an Referenzposition p erscheint in diesem Frame bei p + (dx, dy).
         # scipy.ndimage.shift(data, shift=(sr, sc)) liefert output[r, c] = input[r - sr, c - sc],
         # d.h. mit shift=(-dy, -dx) landet der Bildinhalt von p + (dx, dy) wieder bei p:
@@ -102,6 +115,49 @@ def shift_and_stack(
     return accum
 
 
+def required_border_margin(
+    stack: FrameStack,
+    registered: RegisteredStack,
+    vector: VelocityVector,
+    pixel_scale_arcsec: float,
+) -> int:
+    """Breite (in Pixeln) des Randbereichs, der für `vector` durch Zero-Padding beim
+    Zurückschieben mindestens eines Frames beeinträchtigt sein kann und daher von
+    Peak-Suche/Hintergrundstatistik ausgeschlossen werden muss."""
+    shifts = per_frame_total_shifts(stack, registered, vector, pixel_scale_arcsec)
+    max_abs_shift = max(max(abs(dx), abs(dy)) for dx, dy in shifts)
+    return int(np.ceil(max_abs_shift)) + 1
+
+
+def crop_valid_region(image: np.ndarray, margin: int) -> tuple[np.ndarray, int, int]:
+    """Schneidet `margin` Pixel von jeder Seite ab (max. bis zur Bildmitte) und gibt den
+    Ausschnitt zusammen mit dem (Zeilen-, Spalten-)Offset zur Rückrechnung in Bildkoordinaten
+    zurück."""
+    height, width = image.shape
+    margin = max(0, min(margin, (height - 1) // 2, (width - 1) // 2))
+    if margin == 0:
+        return image, 0, 0
+    return image[margin:-margin, margin:-margin], margin, margin
+
+
+def build_stack_result(vector: VelocityVector, image: np.ndarray, margin: int) -> StackResult:
+    """Bewertet ein bereits gestacktes Bild per Peak-SNR, wobei die durch Zero-Padding
+    beeinträchtigte Randzone (Breite `margin`) von Hintergrundstatistik und Peak-Suche
+    ausgeschlossen wird."""
+    valid, row_offset, col_offset = crop_valid_region(image, margin)
+    _, median, std = sigma_clipped_stats(valid, sigma=3.0)
+    peak_index = np.unravel_index(np.argmax(valid), valid.shape)
+    peak_value = float(valid[peak_index])
+    snr = (peak_value - median) / std if std > 0 else 0.0
+    return StackResult(
+        vector=vector,
+        image=image,
+        peak_value=peak_value,
+        peak_position=(int(peak_index[0] + row_offset), int(peak_index[1] + col_offset)),
+        snr=float(snr),
+    )
+
+
 def evaluate_vector(
     stack: FrameStack,
     registered: RegisteredStack,
@@ -110,17 +166,8 @@ def evaluate_vector(
 ) -> StackResult:
     """Führt Shift-and-Stack für einen Vektor aus und bewertet das Ergebnis per Peak-SNR."""
     image = shift_and_stack(stack, registered, vector, pixel_scale_arcsec)
-    _, median, std = sigma_clipped_stats(image, sigma=3.0)
-    peak_index = np.unravel_index(np.argmax(image), image.shape)
-    peak_value = float(image[peak_index])
-    snr = (peak_value - median) / std if std > 0 else 0.0
-    return StackResult(
-        vector=vector,
-        image=image,
-        peak_value=peak_value,
-        peak_position=(int(peak_index[0]), int(peak_index[1])),
-        snr=float(snr),
-    )
+    margin = required_border_margin(stack, registered, vector, pixel_scale_arcsec)
+    return build_stack_result(vector, image, margin)
 
 
 def search_velocity_grid(
