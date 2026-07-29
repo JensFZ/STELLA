@@ -42,6 +42,14 @@ Ergebnisse zunächst kritisch gegenprüfen.
 
 ## Installation
 
+### Fertiges Paket (Windows)
+
+Unter [Releases](https://github.com/JensFZ/STELLA/releases) liegt ein ZIP mit
+`STELLA.exe`. Entpacken, starten — eine Python-Installation ist nicht nötig. Das Paket
+enthält PyTorch in der CPU-Variante; für GPU-Beschleunigung siehe [BUILD.md](BUILD.md).
+
+### Aus dem Quellcode
+
 Voraussetzung ist Python 3.11 oder neuer.
 
 ```bash

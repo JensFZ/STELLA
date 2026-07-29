@@ -67,6 +67,42 @@ Ordner ist das Auslieferungspaket und muss zusammen weitergegeben werden.
   `pytest.importorskip`, das die Ausnahme `Skipped` wirft — die erbt von `BaseException`
   und läuft daher an PyInstallers Fehlerbehandlung (die `Exception` abfängt) vorbei.
 
+## Release über GitHub Actions
+
+`.github/workflows/release.yml` baut das Windows-Bundle und hängt es an ein GitHub-Release.
+Ausgelöst wird es durch einen Versions-Tag:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Der Ablauf: Abhängigkeiten installieren → **Tag gegen `project.version` in `pyproject.toml`
+prüfen** → ruff → pytest → Übersetzungen kompilieren → PyInstaller → Headless-Smoke-Test →
+ZIP samt SHA256 → `gh release create`.
+
+Die Versionsprüfung steht bewusst vor allen langlaufenden Schritten: ein Release, dessen
+Nummer nicht zu der passt, die die Anwendung über sich selbst meldet, fällt sonst erst beim
+Nutzer auf. **Vor dem Taggen also die Version in `pyproject.toml` erhöhen.**
+
+Ohne Tag lässt sich derselbe Ablauf über *Actions → Release → Run workflow* starten. Dann
+wird nichts veröffentlicht, das Paket landet als Workflow-Artefakt — nützlich, um eine
+Änderung an `stella.spec` zu prüfen, ohne eine Versionsnummer zu verbrauchen.
+
+Bewusste Festlegungen:
+
+- **Nicht Teil von `ci.yml`.** Der Build lädt PyTorch und Qt herunter und braucht rund 20
+  Minuten. Das bei jedem Push zu bezahlen wäre unverhältnismäßig — Bundle-Fehler kommen
+  fast immer aus `stella.spec`, nicht aus dem Anwendungscode. Wer daran arbeitet, nutzt
+  den manuellen Probelauf.
+- **CPU-only PyTorch.** Die CUDA-Wheels bringen mehrere GB Laufzeitbibliotheken mit; das
+  Asset überschritte die 2-GB-Grenze für Release-Dateien. Ein CUDA-Paket muss lokal gebaut
+  werden (siehe unten).
+- **7-Zip statt `Compress-Archive`.** Bei rund 700 MB ist das Cmdlet um ein Vielfaches
+  langsamer. `7z` ist auf den Windows-Runnern vorinstalliert.
+- **Fester Textteil in `.github/release-notes.md`.** Ein PowerShell-Here-String verlangt
+  seinen Inhalt ab Spalte 0 und fiele damit aus dem eingerückten YAML-Block heraus.
+  `--generate-notes` hängt die Commits seit dem letzten Tag an.
+
 ## Bekannte Einschränkungen
 
 - **Erststart dauert länger.** Beim ersten Start legt `astropy` seinen Cache an; zusätzlich
@@ -95,6 +131,24 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke_test_build.ps1
 
 Das Skript startet das gebaute Programm und prüft, ob das **Qt-Hauptfenster mit dem Titel
 „STELLA"** erscheint.
+
+Auf einem CI-Runner gibt es keine sichtbare Fenstersitzung, auf die man sich verlassen
+könnte. Dafür gibt es den Headless-Modus:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\smoke_test_build.ps1 -Headless
+```
+
+Er startet die Anwendung mit `--selftest`: sie baut das Hauptfenster auf und beendet sich
+sofort mit einem Rückgabewert, statt in die Ereignisschleife zu gehen. Geprüft werden der
+Fenstertitel **und** ob die über `STELLA_LANGUAGE` angeforderte Übersetzung wirklich
+geladen wurde — Letzteres deckt der sichtbare Test gar nicht ab, obwohl eine fehlende
+`.qm` ein typischer Bundle-Fehler ist (`install_translator()` fällt stillschweigend auf
+die Quellsprache zurück).
+
+Das Zeitlimit ist dabei kein Beiwerk: bricht der Import ab, zeigt PyInstaller einen
+**modalen** Fehlerdialog. Ohne Limit liefe der Job bis zum Job-Timeout, statt mit einer
+verwertbaren Meldung zu scheitern.
 
 > **Nicht nur prüfen, ob der Prozess läuft.** Bei `console=False` zeigt PyInstaller im
 > Fehlerfall einen modalen Dialog „Unhandled exception in script“ — der hält den Prozess am
