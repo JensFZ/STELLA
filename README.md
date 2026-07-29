@@ -90,6 +90,25 @@ Kandidatenbewertung speichern und später fortsetzen.
 > Objektbezeichnung und den Stationscode (`XXX`). Beide müssen durch die offiziell
 > zugewiesenen Werte ersetzt werden — siehe [core/mpc_report.py](core/mpc_report.py).
 
+## Fehlersuche
+
+STELLA protokolliert jeden Lauf nach `~/.stella/logs/stella.log` — unter Windows also
+`%USERPROFILE%\.stella\logs\stella.log`. Am schnellsten erreichbar über *Hilfe → Logdatei
+anzeigen*.
+
+Das Protokoll enthält die Umgebung (Python- und Paketversionen, gewähltes Rechengerät), den
+Ablauf jedes Schritts mit Laufzeiten und Kennzahlen (erkannte Sterne, Drift je Frame, Anzahl
+Kandidaten, Gaia-Matches, RMS-Residuum) sowie vollständige Tracebacks bei Fehlern. Bei einem
+Problem ist diese Datei das Erste, was weiterhilft.
+
+Ausführlicher wird es mit:
+
+```bash
+set STELLA_LOG_LEVEL=DEBUG
+```
+
+Weitere Hinweise, insbesondere zu Startproblemen des gebauten Pakets: [BUILD.md](BUILD.md).
+
 ## Aufbau
 
 ```

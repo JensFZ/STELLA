@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -16,6 +18,8 @@ from core.gpu_tracking import search_velocity_grid_torch
 from core.io_fits import FrameStack, find_fits_files, load_fits_frame
 from core.synthetic_tracking import build_velocity_grid, search_velocity_grid
 
+logger = logging.getLogger(__name__)
+
 
 class FrameStackLoader(QThread):
     """Lädt einen FITS-Ordner in einem Worker-Thread, damit die GUI responsiv bleibt."""
@@ -29,16 +33,40 @@ class FrameStackLoader(QThread):
         self._folder = Path(folder)
 
     def run(self) -> None:
+        started = time.perf_counter()
+        logger.info("Lade FITS-Ordner %s", self._folder)
         try:
             paths = find_fits_files(self._folder)
             total = len(paths)
+            logger.info("%d FITS-Dateien gefunden", total)
             frames = []
             for index, path in enumerate(paths, start=1):
                 frames.append(load_fits_frame(path))
+                logger.debug(
+                    "Frame %d/%d: %s, Größe %s, DATE-OBS=%s",
+                    index,
+                    total,
+                    path.name,
+                    frames[-1].data.shape,
+                    frames[-1].obs_time,
+                )
                 self.progress.emit(index, total)
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Laden des FITS-Ordners fehlgeschlagen")
             self.failed.emit(str(exc))
             return
+
+        without_time = [f.path.name for f in frames if not f.obs_time]
+        if without_time:
+            # Ohne DATE-OBS ist keine Bewegungsrechnung möglich; das fällt sonst erst
+            # viel später bei der Suche auf.
+            logger.warning(
+                "%d Frame(s) ohne DATE-OBS im Header: %s",
+                len(without_time),
+                ", ".join(without_time[:5]),
+            )
+
+        logger.info("%d Frames geladen in %.1fs", len(frames), time.perf_counter() - started)
         self.finished_loading.emit(FrameStack(frames=frames))
 
 
@@ -64,12 +92,27 @@ class AlignmentWorker(QThread):
         self._threshold_sigma = threshold_sigma
 
     def run(self) -> None:
+        started = time.perf_counter()
+        logger.info(
+            "Starte Alignment: %d Frames, Referenz %d, FWHM %.1f, Schwelle %.1f sigma",
+            len(self._stack),
+            self._reference_index,
+            self._fwhm,
+            self._threshold_sigma,
+        )
         try:
             total = len(self._stack)
             star_lists = []
             for index, frame in enumerate(self._stack.frames, start=1):
                 star_lists.append(
                     detect_stars(frame.data, fwhm=self._fwhm, threshold_sigma=self._threshold_sigma)
+                )
+                logger.debug(
+                    "Frame %d/%d (%s): %d Sterne erkannt",
+                    index,
+                    total,
+                    frame.path.name,
+                    len(star_lists[-1]),
                 )
                 self.progress.emit(index, total)
 
@@ -81,8 +124,25 @@ class AlignmentWorker(QThread):
                 for frame, stars in zip(self._stack.frames, star_lists, strict=True)
             ]
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Alignment fehlgeschlagen")
             self.failed.emit(str(exc))
             return
+
+        for index, entry in enumerate(registered):
+            alignment = entry.alignment
+            # Wenige Matches deuten auf ein zu schwaches Sternfeld oder zu große Drift hin
+            # — die Ursache, wenn die spätere Suche nichts findet.
+            log = logger.warning if alignment.n_matches < 3 else logger.info
+            log(
+                "Frame %d (%s): dx=%+.2f dy=%+.2f, %d Sterne gematcht",
+                index,
+                entry.frame.path.name,
+                alignment.dx,
+                alignment.dy,
+                alignment.n_matches,
+            )
+
+        logger.info("Alignment abgeschlossen in %.1fs", time.perf_counter() - started)
         self.finished_alignment.emit(
             RegisteredStack(reference_index=self._reference_index, frames=registered)
         )
@@ -120,6 +180,8 @@ class DetectionWorker(QThread):
         self._cancelled = True
 
     def run(self) -> None:
+        started = time.perf_counter()
+        logger.info("Starte Kandidatensuche mit Parametern: %s", self._params)
         try:
             grid = build_velocity_grid(
                 speed_range_arcsec_per_min=self._params["speed_range_arcsec_per_min"],
@@ -134,24 +196,67 @@ class DetectionWorker(QThread):
             search = (
                 search_velocity_grid_torch if self._params["use_gpu"] else search_velocity_grid
             )
+            logger.info(
+                "%d Vektoren, %d Frames, Pfad: %s, Blockgröße %d",
+                total,
+                len(self._stack),
+                "PyTorch-Batch" if self._params["use_gpu"] else "NumPy/SciPy (CPU)",
+                self.CHUNK_SIZE,
+            )
 
             results = []
             for start in range(0, total, self.CHUNK_SIZE):
                 if self._cancelled:
+                    logger.info(
+                        "Suche vom Nutzer abgebrochen nach %d/%d Vektoren", len(results), total
+                    )
                     self.status.emit("Suche abgebrochen.")
                     self.finished_detection.emit([])
                     return
+                chunk_started = time.perf_counter()
                 chunk = grid[start : start + self.CHUNK_SIZE]
                 results.extend(search(self._stack, self._registered, chunk, pixel_scale))
+                logger.debug(
+                    "Block %d-%d von %d in %.2fs",
+                    start,
+                    min(start + self.CHUNK_SIZE, total),
+                    total,
+                    time.perf_counter() - chunk_started,
+                )
                 self.progress.emit(min(start + self.CHUNK_SIZE, total), total)
+
+            search_seconds = time.perf_counter() - started
+            logger.info(
+                "Gittersuche fertig in %.1fs (%.2fs je Vektor)",
+                search_seconds,
+                search_seconds / max(total, 1),
+            )
 
             self.status.emit("Gruppiere Treffer ...")
             detections: list[DetectionResult] = detect_candidates(
                 results, snr_threshold=self._params["snr_threshold"]
             )
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Kandidatensuche fehlgeschlagen")
             self.failed.emit(str(exc))
             return
+
+        if detections:
+            logger.info(
+                "%d Kandidat(en) nach Gruppierung, stärkster: SNR %.1f bei %s mit %s",
+                len(detections),
+                detections[0].snr,
+                detections[0].position,
+                detections[0].vector,
+            )
+        else:
+            # Häufigste Ursachen: Suchraum verfehlt die Objektgeschwindigkeit oder die
+            # SNR-Schwelle ist zu hoch angesetzt.
+            logger.warning(
+                "Keine Kandidaten über der SNR-Schwelle %.1f gefunden",
+                self._params["snr_threshold"],
+            )
+        logger.info("Kandidatensuche gesamt %.1fs", time.perf_counter() - started)
         self.finished_detection.emit(detections)
 
 
@@ -176,15 +281,24 @@ class AstrometryWorker(QThread):
         self._params = params
 
     def run(self) -> None:
+        started = time.perf_counter()
+        logger.info("Starte Astrometrie mit Parametern: %s", self._params)
         try:
             self.status.emit("Frage Gaia-Katalog ab ...")
+            query_started = time.perf_counter()
             gaia_stars = query_gaia_stars(
                 center_ra_deg=self._params["center_ra_deg"],
                 center_dec_deg=self._params["center_dec_deg"],
                 radius_deg=self._params["radius_deg"],
                 mag_limit=self._params["mag_limit"],
             )
+            logger.info(
+                "Gaia lieferte %d Sterne in %.1fs",
+                len(gaia_stars),
+                time.perf_counter() - query_started,
+            )
             if len(gaia_stars) == 0:
+                logger.warning("Gaia-Abfrage ohne Treffer — Feldzentrum oder Radius prüfen")
                 self.failed.emit("Keine Gaia-Sterne im Suchradius gefunden.")
                 return
 
@@ -203,7 +317,19 @@ class AstrometryWorker(QThread):
                 gaia_stars,
                 max_separation_arcsec=self._params["max_separation_arcsec"],
             )
+            logger.info(
+                "%d von %d erkannten Sternen gematcht (Toleranz %.1f arcsec)",
+                len(matches),
+                len(self._reference_stars),
+                self._params["max_separation_arcsec"],
+            )
             if len(matches) < 3:
+                # Typisch bei falschem Feldzentrum, falschem Pixelmaßstab oder zu enger
+                # Toleranz — die Näherungs-WCS trifft dann daneben.
+                logger.warning(
+                    "Zu wenige Matches für einen WCS-Fit. Feldzentrum, Pixelmaßstab und "
+                    "Match-Toleranz prüfen."
+                )
                 self.failed.emit(
                     f"Nur {len(matches)} Gaia-Matches gefunden, mindestens 3 für WCS-Fit nötig."
                 )
@@ -212,6 +338,17 @@ class AstrometryWorker(QThread):
             self.status.emit("Fitte WCS-Lösung ...")
             solution = fit_astrometric_solution(matches)
         except Exception as exc:  # noqa: BLE001
+            # Hier landen auch Netzwerkfehler der Gaia-Abfrage; der Traceback zeigt, ob es
+            # an der Verbindung oder an den Daten lag.
+            logger.exception("Astrometrie fehlgeschlagen")
             self.failed.emit(str(exc))
             return
+
+        logger.info(
+            "WCS-Fit: %d Matches, RMS %.3f arcsec, max %.3f arcsec (gesamt %.1fs)",
+            solution.n_matches,
+            solution.rms_residual_arcsec,
+            float(solution.residuals_arcsec.max()),
+            time.perf_counter() - started,
+        )
         self.finished_astrometry.emit(solution)

@@ -1,3 +1,7 @@
+import logging
+import subprocess
+import sys
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
@@ -12,6 +16,7 @@ from core.alignment import RegisteredStack
 from core.astrometry import AstrometricSolution, estimate_field_center_and_scale, pixel_to_sky
 from core.detection import DetectionResult
 from core.io_fits import FrameStack
+from core.logging_setup import log_file_path
 from core.mpc_report import MPCObservation, write_mpc_report
 from core.project import Project, ProjectStore
 from core.synthetic_tracking import candidate_positions_per_frame
@@ -23,6 +28,8 @@ from gui.views.project_dialog import OpenProjectDialog
 from gui.views.results_table import ResultsTable
 from gui.views.search_setup import SearchSetupDialog
 from gui.workers import AlignmentWorker, AstrometryWorker, DetectionWorker, FrameStackLoader
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -112,9 +119,34 @@ class MainWindow(QMainWindow):
         project_menu.addAction(self.export_mpc_action)
 
         help_menu = menu_bar.addMenu("&Hilfe")
+        show_log_action = QAction("Logdatei anzeigen", self)
+        show_log_action.triggered.connect(self._show_log_file)
+        help_menu.addAction(show_log_action)
+        help_menu.addSeparator()
         about_action = QAction("Über STELLA", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    def _show_log_file(self) -> None:
+        """Öffnet den Ordner mit der Logdatei im Dateimanager. Bewusst der Ordner und nicht
+        die Datei selbst: so sind auch die rotierten älteren Logs greifbar, und es braucht
+        keine Annahme darüber, womit .log-Dateien geöffnet werden."""
+        path = log_file_path()
+        if not path.exists():
+            QMessageBox.information(
+                self, "Logdatei", f"Noch keine Logdatei vorhanden.\nErwartet unter:\n{path}"
+            )
+            return
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["explorer", "/select,", str(path)], check=False)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", "-R", str(path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(path.parent)], check=False)
+        except Exception:  # noqa: BLE001
+            logger.exception("Logordner konnte nicht geöffnet werden")
+            QMessageBox.information(self, "Logdatei", f"Die Logdatei liegt unter:\n{path}")
 
     def _show_about(self) -> None:
         QMessageBox.about(
@@ -325,6 +357,15 @@ class MainWindow(QMainWindow):
                 )
 
         write_mpc_report(observations, path)
+        logger.info(
+            "MPC-Report geschrieben: %s (%d Beobachtungen aus %d Kandidaten über %d Frames, "
+            "Pixelmaßstab %.4f arcsec/px)",
+            path,
+            len(observations),
+            len(confirmed),
+            len(obs_times),
+            pixel_scale,
+        )
         self.statusBar().showMessage(
             f"MPC-Report gespeichert: {len(observations)} Beobachtung(en) "
             f"aus {len(confirmed)} Kandidat(en) über {len(obs_times)} Frames.",
@@ -366,8 +407,15 @@ class MainWindow(QMainWindow):
     def _save_session(self) -> None:
         if self._current_project is None:
             return
-        self._get_project_store().save_detections(
-            self._current_project.id, self.results_table.detections()
+        detections = self.results_table.detections()
+        self._get_project_store().save_detections(self._current_project.id, detections)
+        confirmed = sum(1 for d in detections if d.confirmed is True)
+        logger.info(
+            "Sitzung '%s' (ID %d) gespeichert: %d Kandidaten, davon %d bestätigt",
+            self._current_project.name,
+            self._current_project.id,
+            len(detections),
+            confirmed,
         )
         self.statusBar().showMessage(f"Sitzung „{self._current_project.name}“ gespeichert.", 5000)
 

@@ -121,6 +121,52 @@ im Archiv prüfen:
 Reine Python-Pakete liegen im PYZ-Archiv, nicht als Ordner unter `_internal/` — ein Blick
 ins Dateisystem allein ist daher irreführend.
 
+## Fehlersuche
+
+### Logdatei (erster Anlaufpunkt)
+
+STELLA schreibt bei jedem Lauf ein Protokoll nach:
+
+```
+%USERPROFILE%\.stella\logs\stella.log
+```
+
+Erreichbar auch über *Hilfe → Logdatei anzeigen*. Die Datei rotiert (max. 2 MB, 3
+Sicherungen) und enthält Umgebungsdaten (Python-, Paketversionen, gewähltes Rechengerät),
+den Ablauf der einzelnen Schritte mit Laufzeiten sowie **vollständige Tracebacks**.
+
+Das ist im ausgelieferten Paket der einzige brauchbare Kanal: mit `console=False` gibt es
+keine Konsole, und der PyInstaller-Fehlerdialog lässt sich nicht kopieren.
+
+Mehr Details liefert:
+
+```bash
+set STELLA_LOG_LEVEL=DEBUG
+```
+
+Dann werden zusätzlich einzelne Frames, Sternzahlen pro Frame und die Laufzeit je
+Vektor-Block protokolliert.
+
+Die Datei ist UTF-8. Windows PowerShell 5.1 liest mit `Get-Content` standardmäßig ANSI und
+stellt Umlaute dann falsch dar — in dem Fall `-Encoding utf8` angeben:
+
+```bash
+Get-Content $env:USERPROFILE\.stella\logs\stella.log -Encoding utf8 -Tail 50
+```
+
+### Konsolen-Build für Startprobleme
+
+Bricht das Programm ab, *bevor* das Logging steht (etwa bei einem fehlenden Modul im
+Bundle), hilft ein Build mit sichtbarer Konsole. In `stella.spec` vorübergehend:
+
+```python
+console=True,
+```
+
+Danach neu bauen und die `.exe` aus einem Terminal starten — der Traceback erscheint direkt.
+Da sich nur die EXE-Stufe ändert, ist dieser Neubau deutlich schneller als der erste.
+Anschließend nicht vergessen, wieder auf `console=False` zu stellen.
+
 ## Verifizierter Stand
 
 Zuletzt gebaut und geprüft auf Windows 11 (Python 3.12, PyInstaller 6.21):
