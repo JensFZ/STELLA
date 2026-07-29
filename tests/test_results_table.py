@@ -4,6 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.detection import DetectionResult  # noqa: E402
@@ -101,3 +102,81 @@ def test_detections_accessor_returns_all_candidates():
     table.set_detections(detections)
 
     assert table.detections() == detections
+
+
+def test_keyboard_rates_current_row_and_advances():
+    """Kernpfad der Triage: J bewertet und springt weiter, damit hunderte Kandidaten
+    ohne Mausweg durchgesehen werden koennen."""
+    _app()
+    table = ResultsTable()
+    high, low = _make_detection(50.0, 1.0), _make_detection(5.0, 2.0)
+    table.set_detections([high, low])
+
+    # Nach absteigender Sortierung steht 'high' in Zeile 0 und ist vorausgewaehlt.
+    assert table.table.currentRow() == 0
+    QTest.keyClick(table.table, Qt.Key.Key_J)
+
+    assert high.confirmed is True
+    assert table.table.currentRow() == 1, "muss automatisch zum naechsten Kandidaten springen"
+
+    QTest.keyClick(table.table, Qt.Key.Key_N)
+    assert low.confirmed is False
+
+
+def test_keyboard_zero_resets_to_open():
+    _app()
+    table = ResultsTable()
+    detection = _make_detection(50.0, 1.0, confirmed=True)
+    table.set_detections([detection])
+
+    QTest.keyClick(table.table, Qt.Key.Key_0)
+
+    assert detection.confirmed is None
+
+
+def test_keyboard_rating_hits_the_right_candidate_after_sorting():
+    """Wie beim Mausweg muss die Zuordnung das Umsortieren ueberstehen."""
+    _app()
+    table = ResultsTable()
+    high, low = _make_detection(50.0, 1.0), _make_detection(5.0, 2.0)
+    table.set_detections([high, low])
+
+    table.table.sortItems(4, Qt.SortOrder.AscendingOrder)  # jetzt steht 'low' oben
+    table.table.selectRow(0)
+    QTest.keyClick(table.table, Qt.Key.Key_J)
+
+    assert low.confirmed is True
+    assert high.confirmed is None
+
+
+def test_summary_counts_progress():
+    _app()
+    table = ResultsTable()
+    a, b, c = (
+        _make_detection(50.0, 1.0),
+        _make_detection(40.0, 2.0),
+        _make_detection(30.0, 3.0),
+    )
+    table.set_detections([a, b, c])
+
+    table.table.selectRow(0)
+    QTest.keyClick(table.table, Qt.Key.Key_J)
+    QTest.keyClick(table.table, Qt.Key.Key_N)
+
+    text = table.summary_label.text()
+    assert "3 Kandidaten" in text
+    assert "1 bestätigt" in text
+    assert "1 verworfen" in text
+    assert "1 offen" in text
+
+
+def test_unhandled_keys_are_passed_through():
+    """Navigationstasten duerfen nicht verschluckt werden."""
+    _app()
+    table = ResultsTable()
+    table.set_detections([_make_detection(50.0, 1.0), _make_detection(5.0, 2.0)])
+
+    table.table.selectRow(0)
+    QTest.keyClick(table.table, Qt.Key.Key_Down)
+
+    assert table.table.currentRow() == 1

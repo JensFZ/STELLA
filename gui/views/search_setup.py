@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from core.gpu_tracking import get_device
 from core.project import ProjectStore
+from core.synthetic_tracking import build_velocity_grid
 
 PRESET_KIND = "search"
 
@@ -28,10 +29,16 @@ class SearchSetupDialog(QDialog):
     Wird ein `project_store` übergeben, können die aktuellen Parameter als benannter Preset
     gespeichert bzw. ein zuvor gespeicherter Preset geladen werden (PLAN.md Phase 7)."""
 
-    def __init__(self, parent: QWidget | None = None, project_store: ProjectStore | None = None):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        project_store: ProjectStore | None = None,
+        frame_count: int = 0,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Kandidaten suchen")
         self._project_store = project_store
+        self._frame_count = frame_count
 
         self.pixel_scale_spin = QDoubleSpinBox(self)
         self.pixel_scale_spin.setRange(0.001, 100.0)
@@ -76,17 +83,55 @@ class SearchSetupDialog(QDialog):
         form.addRow(self.use_gpu_checkbox)
         form.addRow(QLabel(f"Erkanntes Gerät: {get_device()}", self))
 
+        # Qt beschriftet die Standardknöpfe nach Systemsprache; auf einem englischen
+        # Windows stünde "Cancel" neben ansonsten deutscher Oberfläche.
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self
         )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Suche starten")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Abbrechen")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+
+        # Aufwandsabschätzung: das Gitter wächst multiplikativ mit den Parametern, eine
+        # unbedacht feine Einstellung kann die Suche von Minuten auf Stunden verlängern.
+        self.cost_label = QLabel("", self)
+        self.cost_label.setStyleSheet("color: #9a9a9a;")
+        for widget in (
+            self.speed_min_spin,
+            self.speed_max_spin,
+            self.speed_step_spin,
+            self.angle_step_spin,
+        ):
+            widget.valueChanged.connect(self._update_cost)
+        self._update_cost()
 
         layout = QVBoxLayout(self)
         if project_store is not None:
             layout.addLayout(self._build_preset_bar())
         layout.addLayout(form)
+        layout.addWidget(self.cost_label)
         layout.addWidget(buttons)
+
+    def vector_count(self) -> int:
+        """Anzahl Vektoren, die das eingestellte Gitter ergibt."""
+        return len(
+            build_velocity_grid(
+                speed_range_arcsec_per_min=(
+                    self.speed_min_spin.value(),
+                    self.speed_max_spin.value(),
+                ),
+                speed_step_arcsec_per_min=self.speed_step_spin.value(),
+                angle_step_deg=self.angle_step_spin.value(),
+            )
+        )
+
+    def _update_cost(self) -> None:
+        count = self.vector_count()
+        text = f"Suchraum: {count} Bewegungsvektoren"
+        if self._frame_count:
+            text += f" × {self._frame_count} Frames"
+        self.cost_label.setText(text)
 
     def _build_preset_bar(self) -> QHBoxLayout:
         self.preset_combo = QComboBox(self)

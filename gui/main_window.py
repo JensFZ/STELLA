@@ -340,7 +340,9 @@ class MainWindow(QMainWindow):
     def _open_search_setup(self) -> None:
         if self._stack is None or self._registered is None:
             return
-        dialog = SearchSetupDialog(self, project_store=self._get_project_store())
+        dialog = SearchSetupDialog(
+            self, project_store=self._get_project_store(), frame_count=len(self._stack)
+        )
         if dialog.exec() != SearchSetupDialog.DialogCode.Accepted:
             return
 

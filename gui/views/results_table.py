@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QImage, QPixmap
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QHeaderView,
@@ -23,7 +23,25 @@ STATUS_COLUMN = 5
 STATUS_OPTIONS = ["Offen", "Bestätigt", "Verworfen"]
 STATUS_TO_CONFIRMED = {0: None, 1: True, 2: False}
 CONFIRMED_TO_STATUS = {None: 0, True: 1, False: 2}
-THUMBNAIL_DISPLAY_SIZE = 64
+
+#: Größer als zuvor (64 px): bei 32×32-Ausschnitten war auf 64 px nur Rauschen erkennbar,
+#: eine Beurteilung des Kandidaten damit nicht möglich.
+THUMBNAIL_DISPLAY_SIZE = 96
+
+#: Farbige Statusanzeige, damit der Fortschritt beim Durchsehen auf einen Blick sichtbar ist.
+STATUS_COLORS = {None: "#c8c8c8", True: "#5fbf7f", False: "#c86a6a"}
+
+#: Tastenkürzel für die Bewertung. Das Sichten hunderter Kandidaten ist die Hauptarbeit mit
+#: diesem Werkzeug — über die Tastatur geht das um ein Vielfaches schneller als über ein
+#: Auswahlfeld mit zwei Klicks je Kandidat.
+KEY_TO_CONFIRMED = {
+    Qt.Key.Key_J: True,  # Ja
+    Qt.Key.Key_Y: True,  # Yes, auf US-Tastatur an gleicher Stelle
+    Qt.Key.Key_Plus: True,
+    Qt.Key.Key_N: False,  # Nein
+    Qt.Key.Key_Minus: False,
+    Qt.Key.Key_0: None,  # zurück auf offen
+}
 
 #: Rolle, unter der die zugehörige DetectionResult am Item hängt. Muss am Item selbst
 #: hängen (nicht an der Zeilennummer), damit die Zuordnung das Sortieren übersteht.
@@ -33,12 +51,33 @@ SORT_ROLE = int(Qt.ItemDataRole.UserRole) + 2
 
 
 def _thumbnail_pixmap(image: np.ndarray) -> QPixmap:
+    """Vorschaubild des Kandidaten mit Markierung der Fundstelle.
+
+    Der Ausschnitt ist um die Fundposition zentriert (siehe core.detection). Ohne
+    Markierung ist im Rauschen nicht erkennbar, worauf sich der Treffer bezieht.
+    """
     stretched = np.ascontiguousarray(stretch_to_uint8(image))
     height, width = stretched.shape
     qimage = QImage(stretched.data, width, height, width, QImage.Format.Format_Grayscale8).copy()
-    return QPixmap.fromImage(qimage).scaled(
-        THUMBNAIL_DISPLAY_SIZE, THUMBNAIL_DISPLAY_SIZE, Qt.AspectRatioMode.KeepAspectRatio
+    pixmap = QPixmap.fromImage(qimage).scaled(
+        THUMBNAIL_DISPLAY_SIZE,
+        THUMBNAIL_DISPLAY_SIZE,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
     )
+
+    painter = QPainter(pixmap)
+    pen = QPen(QColor("#ff5c5c"))
+    pen.setWidth(1)
+    painter.setPen(pen)
+    centre = pixmap.width() / 2, pixmap.height() / 2
+    radius = pixmap.width() * 0.18
+    # Offener Kreis statt Fadenkreuz: die Fundstelle selbst bleibt sichtbar.
+    painter.drawEllipse(
+        int(centre[0] - radius), int(centre[1] - radius), int(2 * radius), int(2 * radius)
+    )
+    painter.end()
+    return pixmap
 
 
 class NumericTableWidgetItem(QTableWidgetItem):
@@ -77,6 +116,28 @@ class StatusDelegate(QStyledItemDelegate):
         model.setData(index, editor.currentText(), Qt.ItemDataRole.DisplayRole)
 
 
+class TriageTable(QTableWidget):
+    """Tabelle, die Bewertungen per Tastatur entgegennimmt.
+
+    Beim Sichten hunderter Kandidaten ist der Weg über das Auswahlfeld (zwei Klicks je
+    Kandidat) der Engpass. Mit J/N wird bewertet und automatisch zum nächsten Kandidaten
+    gesprungen, sodass eine Hand am Platz bleiben kann.
+    """
+
+    rated = Signal(int, object)  # Zeile, neuer Bestätigungszustand
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt-Namenskonvention)
+        key = Qt.Key(event.key())
+        if key in KEY_TO_CONFIRMED and self.currentRow() >= 0:
+            self.rated.emit(self.currentRow(), KEY_TO_CONFIRMED[key])
+            next_row = self.currentRow() + 1
+            if next_row < self.rowCount():
+                self.selectRow(next_row)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class ResultsTable(QWidget):
     """Kandidatenliste mit Vorschaubild pro Treffer, sortierbaren Spalten und manueller
     Bestätigung/Verwerfung durch den Nutzer (false positives sind bei Synthetic Tracking
@@ -90,8 +151,13 @@ class ResultsTable(QWidget):
         self._detections: list[DetectionResult] = []
 
         self.summary_label = QLabel("Keine Kandidaten.", self)
+        self.hint_label = QLabel(
+            "Tastatur: J bestätigen · N verwerfen · 0 zurücksetzen — springt jeweils weiter.",
+            self,
+        )
+        self.hint_label.setStyleSheet("color: #9a9a9a; font-size: 11px;")
 
-        self.table = QTableWidget(0, len(COLUMN_LABELS), self)
+        self.table = TriageTable(0, len(COLUMN_LABELS), self)
         self.table.setHorizontalHeaderLabels(COLUMN_LABELS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
@@ -102,10 +168,12 @@ class ResultsTable(QWidget):
             QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.SelectedClicked
         )
         self.table.itemChanged.connect(self._on_item_changed)
+        self.table.rated.connect(self._on_rated)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary_label)
         layout.addWidget(self.table)
+        layout.addWidget(self.hint_label)
 
     def set_detections(self, detections: list[DetectionResult]) -> None:
         self._detections = detections
@@ -149,13 +217,38 @@ class ResultsTable(QWidget):
 
             status_item = QTableWidgetItem(STATUS_OPTIONS[CONFIRMED_TO_STATUS[detection.confirmed]])
             status_item.setData(DETECTION_ROLE, detection)
+            status_item.setForeground(QColor(STATUS_COLORS[detection.confirmed]))
             self.table.setItem(row, STATUS_COLUMN, status_item)
 
         self.table.blockSignals(False)
         self.table.setSortingEnabled(True)
         self.table.sortItems(4, Qt.SortOrder.DescendingOrder)
         self.table.resizeRowsToContents()
-        self.summary_label.setText(f"{len(detections)} Kandidat(en) gefunden.")
+        if detections:
+            self.table.selectRow(0)
+            self.table.setFocus()
+        self._update_summary()
+
+    def _update_summary(self) -> None:
+        """Zeigt den Sichtungsfortschritt. Bei hunderten Kandidaten ist die reine Gesamtzahl
+        wenig hilfreich — entscheidend ist, wie viel noch offen ist."""
+        total = len(self._detections)
+        if not total:
+            self.summary_label.setText("Keine Kandidaten.")
+            return
+        confirmed = sum(1 for d in self._detections if d.confirmed is True)
+        rejected = sum(1 for d in self._detections if d.confirmed is False)
+        self.summary_label.setText(
+            f"{total} Kandidaten · {confirmed} bestätigt · {rejected} verworfen · "
+            f"{total - confirmed - rejected} offen"
+        )
+
+    def _on_rated(self, row: int, confirmed: bool | None) -> None:
+        """Bewertung über die Tastatur: setzt den Text der Statuszelle, den Rest erledigt
+        der bestehende itemChanged-Pfad."""
+        item = self.table.item(row, STATUS_COLUMN)
+        if item is not None:
+            item.setText(STATUS_OPTIONS[CONFIRMED_TO_STATUS[confirmed]])
 
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
         if item.column() != STATUS_COLUMN:
@@ -164,6 +257,8 @@ class ResultsTable(QWidget):
         if detection is None:
             return
         detection.confirmed = STATUS_TO_CONFIRMED[STATUS_OPTIONS.index(item.text())]
+        item.setForeground(QColor(STATUS_COLORS[detection.confirmed]))
+        self._update_summary()
         self.confirmation_changed.emit()
 
     def detections(self) -> list[DetectionResult]:
