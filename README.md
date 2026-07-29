@@ -129,6 +129,21 @@ Nur die längste Serie wird verwendet (1164 Frames ab 2025-02-16T23:01)
 Lade 258 Frames der Größe (1920, 1080) (~2.0 GB)
 ```
 
+## Fensteraufteilung
+
+Das Bild ist der Hauptinhalt und bekommt den Platz. Die Aufteilung passt sich an:
+
+- **Bei Hochformataufnahmen** (etwa 1080×1920 vom Seestar S50) wandert der Thumbnail-Streifen
+  an die rechte Seite. Unter dem Bild würde er genau die Höhe wegnehmen, die das Hochformat
+  braucht, während links und rechts Fläche frei bliebe.
+- **Bild und Streifen** sind durch einen Ziehgriff getrennt, der Streifen lässt sich ganz
+  zuklappen.
+- **Kandidaten- und Astrometrie-Panel** lassen sich frei verschieben, andocken und über das
+  Menü *Ansicht* ein- und ausblenden.
+
+Fenstergröße und Anordnung werden beim Beenden gespeichert und beim nächsten Start
+wiederhergestellt. *Ansicht → Anordnung zurücksetzen* stellt den Auslieferungszustand her.
+
 ## Sprache
 
 Die Oberfläche gibt es auf Deutsch und Englisch, umschaltbar im Menü *Sprache*. Ohne

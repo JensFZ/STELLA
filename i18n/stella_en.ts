@@ -91,143 +91,159 @@ The exposures need a DATE-OBS timestamp in the header — it is the basis of the
 <context>
     <name>ImageViewer</name>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="83" />
+        <location filename="../gui/views/image_viewer.py" line="127" />
         <source>Keine Frames geladen</source>
         <translation>No frames loaded</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="89" />
+        <location filename="../gui/views/image_viewer.py" line="133" />
         <source>Schwarzpunkt </source>
         <translation>Black point </translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="96" />
+        <location filename="../gui/views/image_viewer.py" line="140" />
         <source>Weißpunkt </source>
         <translation>White point </translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="99" />
+        <location filename="../gui/views/image_viewer.py" line="143" />
         <source>Blink</source>
         <translation>Blink</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="103" />
+        <location filename="../gui/views/image_viewer.py" line="147" />
         <source>Sterne anzeigen</source>
         <translation>Show stars</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="166" />
+        <location filename="../gui/views/image_viewer.py" line="153" />
+        <source>Einpassen</source>
+        <translation>Fit to view</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/image_viewer.py" line="293" />
         <source>Keine Frames gefunden</source>
+        <extracomment>Die Aufteilung wird beim ersten Anzeigen gesetzt — vorher steht die tatsächliche Höhe nicht fest und eine anteilige Verteilung wäre sinnlos. Danach bleibt die Einstellung des Nutzers unangetastet.</extracomment>
         <translation>No frames found</translation>
     </message>
 </context>
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../gui/main_window.py" line="92" />
+        <location filename="../gui/main_window.py" line="93" />
         <source>Kandidaten</source>
         <translation>Candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="98" />
-        <location filename="../gui/main_window.py" line="247" />
+        <location filename="../gui/main_window.py" line="102" />
+        <location filename="../gui/main_window.py" line="302" />
         <source>Astrometrie</source>
         <translation>Astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="108" />
+        <location filename="../gui/main_window.py" line="115" />
         <source>&amp;Datei</source>
         <translation>&amp;File</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="109" />
+        <location filename="../gui/main_window.py" line="116" />
         <source>FITS-Ordner öffnen...</source>
         <translation>Open FITS folder...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="114" />
+        <location filename="../gui/main_window.py" line="121" />
         <source>Beenden</source>
         <translation>Quit</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="118" />
+        <location filename="../gui/main_window.py" line="125" />
         <source>&amp;Projekt</source>
         <translation>&amp;Project</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="119" />
+        <location filename="../gui/main_window.py" line="126" />
         <source>Neues Projekt...</source>
         <translation>New project...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="123" />
+        <location filename="../gui/main_window.py" line="130" />
         <source>Projekt öffnen...</source>
         <translation>Open project...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="127" />
+        <location filename="../gui/main_window.py" line="134" />
         <source>Sitzung speichern</source>
         <translation>Save session</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="132" />
+        <location filename="../gui/main_window.py" line="139" />
         <source>Sterne erkennen &amp;&amp; ausrichten...</source>
         <translation>Detect stars &amp;&amp; align...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="137" />
+        <location filename="../gui/main_window.py" line="144" />
         <source>Kandidaten suchen...</source>
         <translation>Search candidates...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="143" />
+        <location filename="../gui/main_window.py" line="150" />
         <source>Astrometrie berechnen...</source>
         <translation>Compute astrometry...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="148" />
+        <location filename="../gui/main_window.py" line="155" />
         <source>MPC-Report exportieren...</source>
         <translation>Export MPC report...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="153" />
+        <location filename="../gui/main_window.py" line="160" />
+        <source>&amp;Ansicht</source>
+        <translation>&amp;View</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="164" />
+        <source>Anordnung zurücksetzen</source>
+        <translation>Reset layout</translation>
+    </message>
+    <message>
+        <location filename="../gui/main_window.py" line="168" />
         <source>&amp;Sprache</source>
         <translation>&amp;Language</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="164" />
+        <location filename="../gui/main_window.py" line="179" />
         <source>&amp;Hilfe</source>
         <translation>&amp;Help</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="165" />
+        <location filename="../gui/main_window.py" line="180" />
         <source>Logdatei anzeigen</source>
         <translation>Show log file</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="169" />
-        <location filename="../gui/main_window.py" line="224" />
+        <location filename="../gui/main_window.py" line="184" />
+        <location filename="../gui/main_window.py" line="239" />
         <source>Über STELLA</source>
         <translation>About STELLA</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="186" />
+        <location filename="../gui/main_window.py" line="201" />
         <source>Sprache geändert</source>
         <translation>Language changed</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="188" />
+        <location filename="../gui/main_window.py" line="203" />
         <source>Die Sprache wird beim nächsten Start von STELLA verwendet.</source>
         <translation>The language will be applied the next time STELLA starts.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="200" />
-        <location filename="../gui/main_window.py" line="217" />
+        <location filename="../gui/main_window.py" line="215" />
+        <location filename="../gui/main_window.py" line="232" />
         <source>Logdatei</source>
         <translation>Log file</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="201" />
+        <location filename="../gui/main_window.py" line="216" />
         <source>Noch keine Logdatei vorhanden.
 Erwartet unter:
 {path}</source>
@@ -236,126 +252,126 @@ Expected at:
 {path}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="218" />
+        <location filename="../gui/main_window.py" line="233" />
         <source>Die Logdatei liegt unter:
 {path}</source>
         <translation>The log file is located at:
 {path}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="226" />
+        <location filename="../gui/main_window.py" line="241" />
         <source>STELLA — Synthetic Tracking Engine for Locating &amp; Logging Asteroids
 Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion.</source>
         <translation>STELLA — Synthetic Tracking Engine for Locating &amp; Logging Asteroids
 Open-source synthetic tracking tool for asteroid detection.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="249" />
+        <location filename="../gui/main_window.py" line="304" />
         <source>bestätigte Kandidaten</source>
         <translation>confirmed candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="253" />
+        <location filename="../gui/main_window.py" line="308" />
         <source>fehlt: {what}</source>
         <translation>missing: {what}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="253" />
+        <location filename="../gui/main_window.py" line="308" />
         <source> und </source>
         <translation> and </translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="268" />
+        <location filename="../gui/main_window.py" line="323" />
         <source>FITS-Ordner öffnen</source>
         <translation>Open FITS folder</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="279" />
+        <location filename="../gui/main_window.py" line="334" />
         <source>Ordner analysieren</source>
         <translation>Analysing folder</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="291" />
+        <location filename="../gui/main_window.py" line="346" />
         <source>Laden abgebrochen.</source>
         <translation>Loading cancelled.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="300" />
+        <location filename="../gui/main_window.py" line="355" />
         <source>FITS-Frames laden</source>
         <translation>Loading FITS frames</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="343" />
+        <location filename="../gui/main_window.py" line="400" />
         <source>Fehler beim Laden</source>
         <translation>Error while loading</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="352" />
+        <location filename="../gui/main_window.py" line="409" />
         <source>Sterne erkennen und ausrichten</source>
         <translation>Detecting stars and aligning</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="363" />
+        <location filename="../gui/main_window.py" line="420" />
         <source>Ausrichtung abgeschlossen.</source>
         <translation>Alignment complete.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="381" />
+        <location filename="../gui/main_window.py" line="438" />
         <source>Fehler bei der Ausrichtung</source>
         <translation>Error during alignment</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="405" />
+        <location filename="../gui/main_window.py" line="462" />
         <source>Kandidatensuche</source>
         <translation>Candidate search</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="419" />
+        <location filename="../gui/main_window.py" line="476" />
         <source>Keine Kandidaten gefunden.</source>
         <translation>No candidates found.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="421" />
+        <location filename="../gui/main_window.py" line="478" />
         <source>keine Kandidaten</source>
         <translation>no candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="436" />
+        <location filename="../gui/main_window.py" line="493" />
         <source>Fehler bei der Kandidatensuche</source>
         <translation>Error during candidate search</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="457" />
+        <location filename="../gui/main_window.py" line="514" />
         <source>Astrometrie berechnen</source>
         <translation>Compute astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="483" />
+        <location filename="../gui/main_window.py" line="540" />
         <source>Fehler bei der Astrometrie</source>
         <translation>Error during astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="492" />
+        <location filename="../gui/main_window.py" line="549" />
         <source>Keine bestätigten Kandidaten</source>
         <translation>No confirmed candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="499" />
+        <location filename="../gui/main_window.py" line="556" />
         <source>MPC-Report speichern</source>
         <translation>Save MPC report</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="499" />
+        <location filename="../gui/main_window.py" line="556" />
         <source>Textdateien (*.txt)</source>
         <translation>Text files (*.txt)</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="555" />
+        <location filename="../gui/main_window.py" line="612" />
         <source>Neues Projekt</source>
         <translation>New project</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="555" />
+        <location filename="../gui/main_window.py" line="612" />
         <source>Projektname:</source>
         <translation>Project name:</translation>
     </message>

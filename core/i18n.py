@@ -5,7 +5,9 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QLibraryInfo, QLocale, QSettings, QTranslator
+from PySide6.QtCore import QCoreApplication, QLibraryInfo, QLocale, QTranslator
+
+from core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +27,6 @@ SUPPORTED_LANGUAGES: dict[str, str] = {
 #: Umgebungsvariable, die die Sprachwahl überschreibt (praktisch zum Testen).
 LANGUAGE_ENV_VAR = "STELLA_LANGUAGE"
 
-_SETTINGS_ORGANISATION = "STELLA"
-_SETTINGS_APPLICATION = "STELLA"
 _SETTINGS_KEY = "language"
 
 #: Hält die installierten Translator am Leben. Qt entfernt einen Translator, sobald das
@@ -49,12 +49,12 @@ def translations_directory() -> Path:
 
 
 def saved_language() -> str | None:
-    value = QSettings(_SETTINGS_ORGANISATION, _SETTINGS_APPLICATION).value(_SETTINGS_KEY)
+    value = settings().value(_SETTINGS_KEY)
     return str(value) if value else None
 
 
 def save_language(language: str) -> None:
-    QSettings(_SETTINGS_ORGANISATION, _SETTINGS_APPLICATION).setValue(_SETTINGS_KEY, language)
+    settings().setValue(_SETTINGS_KEY, language)
 
 
 def current_language() -> str:

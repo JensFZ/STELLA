@@ -4,6 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 from astropy.io import fits
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.alignment import register_stack  # noqa: E402
@@ -126,3 +127,55 @@ def test_zooming_disables_auto_fit_and_button_restores_it(tmp_path):
 
     viewer.view.reset_fit()
     assert viewer.view.transform().m11() != zoomed
+
+
+def _write_sized_fits(path, height: int, width: int) -> None:
+    header = fits.Header()
+    header["DATE-OBS"] = "2026-01-01T00:00:00"
+    fits.writeto(path, np.zeros((height, width), dtype=np.float32), header, overwrite=True)
+
+
+def test_thumbnail_strip_moves_beside_portrait_images(tmp_path):
+    """Bei Hochformataufnahmen ist die Hoehe die knappe Richtung. Ein waagerechter Streifen
+    unter dem Bild wuerde genau dort Platz wegnehmen, waehrend seitlich Flaeche brachliegt."""
+    app = QApplication.instance() or QApplication([])
+    _write_sized_fits(tmp_path / "hoch.fits", height=192, width=108)
+
+    viewer = ImageViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.set_stack(load_frame_stack(tmp_path))
+    app.processEvents()
+
+    assert viewer.content_splitter.orientation() == Qt.Orientation.Horizontal
+
+
+def test_thumbnail_strip_stays_below_landscape_images(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    _write_sized_fits(tmp_path / "quer.fits", height=108, width=192)
+
+    viewer = ImageViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.set_stack(load_frame_stack(tmp_path))
+    app.processEvents()
+
+    assert viewer.content_splitter.orientation() == Qt.Orientation.Vertical
+
+
+def test_image_area_gets_most_of_the_space(tmp_path):
+    """Das Bild ist der Hauptinhalt: der Thumbnail-Streifen darf ihm nicht den Raum nehmen.
+    Zuvor beanspruchte er ueber seinen Groessenhinweis fast die Haelfte."""
+    app = QApplication.instance() or QApplication([])
+    _write_sized_fits(tmp_path / "hoch.fits", height=192, width=108)
+
+    viewer = ImageViewer()
+    viewer.resize(1000, 700)
+    viewer.show()
+    viewer.set_stack(load_frame_stack(tmp_path))
+    app.processEvents()
+
+    image_size, strip_size = viewer.content_splitter.sizes()
+    assert image_size > 3 * strip_size, (
+        f"Bildbereich {image_size} px gegenueber Streifen {strip_size} px"
+    )

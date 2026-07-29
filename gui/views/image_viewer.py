@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSlider,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -108,7 +109,12 @@ class ImageViewer(QWidget):
         self.thumbnail_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.thumbnail_list.setFlow(QListWidget.Flow.LeftToRight)
         self.thumbnail_list.setIconSize(QSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE))
-        self.thumbnail_list.setFixedHeight(THUMBNAIL_SIZE + 32)
+        # Keine feste Höhe mehr: der Streifen sitzt in einem Teiler und richtet sich nach
+        # dem, was der Nutzer ihm zugesteht. Untergrenze, damit ein Thumbnail erkennbar
+        # bleibt; Obergrenze, weil die Liste sonst über ihren Größenhinweis mehr Platz
+        # beansprucht als das Bild — bei Hochformataufnahmen ist ihr Hinweis besonders groß.
+        self.thumbnail_list.setMinimumHeight(THUMBNAIL_SIZE // 2)
+        self.thumbnail_list.setMaximumHeight(THUMBNAIL_SIZE + 44)
         self.thumbnail_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.thumbnail_list.setWrapping(False)
         self.thumbnail_list.currentRowChanged.connect(self.set_frame_index)
@@ -159,13 +165,81 @@ class ImageViewer(QWidget):
         nav.addWidget(self.frame_slider, stretch=1)
         nav.addWidget(self.frame_label)
 
+        # Bild und Thumbnail-Streifen in einem Teiler: das Bild ist der Hauptinhalt und
+        # bekommt den Raum, der Streifen lässt sich aber je nach Bedarf vergrößern oder
+        # ganz zuklappen. Fest verteilte Flächen passen hier nicht, weil das sinnvolle
+        # Verhältnis vom Bildformat abhängt — Hochformataufnahmen brauchen eine andere
+        # Aufteilung als Querformat.
+        # Bild und Navigationszeile gehören zusammen: der Schieberegler und die
+        # Frame-Angabe beziehen sich auf das Bild und brauchen dessen Breite. Nur der
+        # Thumbnail-Streifen wandert je nach Bildformat an die Seite — läge die
+        # Navigationszeile mit im Seitenpanel, würde ihr Platzbedarf dieses unnötig breit
+        # machen.
+        image_area = QWidget(self)
+        image_layout = QVBoxLayout(image_area)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.addWidget(self.view, stretch=1)
+        image_layout.addLayout(nav)
+
+        self.content_splitter = QSplitter(Qt.Orientation.Vertical, self)
+        self.content_splitter.addWidget(image_area)
+        self.content_splitter.addWidget(self.thumbnail_list)
+        self.content_splitter.setStretchFactor(0, 1)
+        self.content_splitter.setStretchFactor(1, 0)
+        self.content_splitter.setCollapsible(0, False)  # das Bild darf nicht verschwinden
+        self.content_splitter.setCollapsible(1, True)
+
         layout = QVBoxLayout(self)
         layout.addLayout(controls)
-        layout.addWidget(self.view, stretch=1)
-        layout.addLayout(nav)
-        layout.addWidget(self.thumbnail_list)
+        layout.addWidget(self.content_splitter, stretch=1)
 
         self._set_controls_enabled(False)
+        #: Die Aufteilung wird beim ersten Anzeigen gesetzt — vorher steht die tatsächliche
+        #: Höhe nicht fest und eine anteilige Verteilung wäre sinnlos. Danach bleibt die
+        #: Einstellung des Nutzers unangetastet.
+        self._layout_initialised = False
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt-Namenskonvention)
+        super().showEvent(event)
+        if not self._layout_initialised:
+            self._layout_initialised = True
+            QTimer.singleShot(0, self, self.reset_layout)
+
+    def _apply_orientation(self, portrait: bool) -> None:
+        """Legt den Thumbnail-Streifen quer oder längs, je nach Bildformat.
+
+        Ein waagerechter Streifen unter dem Bild kostet Höhe. Bei Hochformataufnahmen —
+        etwa vom Seestar S50 mit 1080×1920 — ist die Höhe aber genau die knappe Richtung,
+        während links und rechts Fläche brachliegt. Dort gehört der Streifen an die Seite.
+        """
+        if portrait:
+            self.content_splitter.setOrientation(Qt.Orientation.Horizontal)
+            self.thumbnail_list.setFlow(QListWidget.Flow.TopToBottom)
+            self.thumbnail_list.setMaximumHeight(16777215)  # Höhenbegrenzung aufheben
+            self.thumbnail_list.setMaximumWidth(THUMBNAIL_SIZE + 44)
+            self.thumbnail_list.setMinimumWidth(THUMBNAIL_SIZE // 2)
+        else:
+            self.content_splitter.setOrientation(Qt.Orientation.Vertical)
+            self.thumbnail_list.setFlow(QListWidget.Flow.LeftToRight)
+            self.thumbnail_list.setMaximumWidth(16777215)
+            self.thumbnail_list.setMaximumHeight(THUMBNAIL_SIZE + 44)
+            self.thumbnail_list.setMinimumHeight(THUMBNAIL_SIZE // 2)
+
+    def reset_layout(self) -> None:
+        """Stellt die Startaufteilung zwischen Bild und Thumbnail-Streifen wieder her.
+
+        Bewusst anteilig statt mit festen Pixelwerten: feste Werte passt Qt an den
+        tatsächlich verfügbaren Platz an, und wenn dieser knapp ist, setzt sich der
+        Größenhinweis der Thumbnail-Liste durch — das Bild bekäme dann kaum mehr Raum als
+        der Streifen.
+        """
+        horizontal = self.content_splitter.orientation() == Qt.Orientation.Horizontal
+        total = self.content_splitter.width() if horizontal else self.content_splitter.height()
+        if total <= 0:
+            return
+        secondary = min(THUMBNAIL_SIZE + 60, max(total // 4, 1))
+        self.content_splitter.setSizes([total - secondary, secondary])
+        self.view.reset_fit()
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (
@@ -184,6 +258,10 @@ class ImageViewer(QWidget):
         self.blink_button.setChecked(False)
         self.star_overlay_button.setChecked(False)
         self.star_overlay_button.setEnabled(False)
+
+        if len(stack) > 0:
+            height, width = stack[0].data.shape
+            self._apply_orientation(portrait=height > width)
 
         self.thumbnail_list.blockSignals(True)
         self.thumbnail_list.clear()
@@ -205,11 +283,12 @@ class ImageViewer(QWidget):
         if has_frames:
             self.thumbnail_list.setCurrentRow(0)
             self._update_display()
-            # Ein neuer Stapel kann eine andere Bildgröße haben; zudem ist das Widget beim
-            # Laden womöglich noch nicht sichtbar. Verzögert einpassen, damit das Layout
-            # zuvor die endgültige Größe festlegt.
-            self.view.reset_fit()
-            QTimer.singleShot(0, self.view, self.view.reset_fit)
+            # Ein neuer Stapel kann ein anderes Bildformat haben und damit eine andere
+            # Anordnung des Streifens erfordern; zudem ist das Widget beim Laden womöglich
+            # noch nicht sichtbar. Verzögert neu aufteilen, damit das Layout zuvor die
+            # endgültigen Größen festlegt.
+            self.reset_layout()
+            QTimer.singleShot(0, self, self.reset_layout)
         else:
             self.frame_label.setText(self.tr("Keine Frames gefunden"))
 

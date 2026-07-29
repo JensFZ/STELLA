@@ -23,6 +23,7 @@ from core.io_fits import FolderScan, FrameStack, group_into_sessions
 from core.logging_setup import log_file_path
 from core.mpc_report import MPCObservation, write_mpc_report
 from core.project import Project, ProjectStore
+from core.settings import settings
 from core.synthetic_tracking import candidate_positions_per_frame
 from gui.views.astrometry_panel import AstrometryPanel
 from gui.views.astrometry_setup import AstrometrySetupDialog
@@ -90,17 +91,23 @@ class MainWindow(QMainWindow):
         self.results_table = ResultsTable(self)
         self.results_table.confirmation_changed.connect(self._update_export_step)
         self.results_dock = QDockWidget(self.tr("Kandidaten"), self)
+        # Ein Objektname ist Voraussetzung dafür, dass Qt die Anordnung speichern und
+        # wiederherstellen kann.
+        self.results_dock.setObjectName("results_dock")
         self.results_dock.setWidget(self.results_table)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.results_dock)
         self.results_dock.hide()
 
         self.astrometry_panel = AstrometryPanel(self)
         self.astrometry_dock = QDockWidget(self.tr("Astrometrie"), self)
+        self.astrometry_dock.setObjectName("astrometry_dock")
         self.astrometry_dock.setWidget(self.astrometry_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.astrometry_dock)
         self.astrometry_dock.hide()
 
         self._build_menu()
+        self._apply_default_layout()
+        self._restore_layout()
 
     def _build_menu(self) -> None:
         menu_bar = self.menuBar()
@@ -149,6 +156,14 @@ class MainWindow(QMainWindow):
         self.export_mpc_action.setEnabled(False)
         self.export_mpc_action.triggered.connect(self._export_mpc_report)
         project_menu.addAction(self.export_mpc_action)
+
+        view_menu = menu_bar.addMenu(self.tr("&Ansicht"))
+        view_menu.addAction(self.results_dock.toggleViewAction())
+        view_menu.addAction(self.astrometry_dock.toggleViewAction())
+        view_menu.addSeparator()
+        reset_layout_action = QAction(self.tr("Anordnung zurücksetzen"), self)
+        reset_layout_action.triggered.connect(self._reset_layout)
+        view_menu.addAction(reset_layout_action)
 
         language_menu = menu_bar.addMenu(self.tr("&Sprache"))
         language_group = QActionGroup(self)
@@ -227,6 +242,46 @@ class MainWindow(QMainWindow):
                 "Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion."
             ),
         )
+
+    def _apply_default_layout(self) -> None:
+        """Startaufteilung: das Bild ist der Hauptinhalt und bekommt den Raum.
+
+        Die beiden Panels zeigen Begleitinformationen — die Astrometrie eine Zahlenliste,
+        die Kandidaten eine Auswahlliste. Beide bekommen daher nur so viel Platz, wie sie
+        zum Lesen brauchen, statt wie zuvor über ein Drittel des Fensters.
+        """
+        self.resizeDocks([self.astrometry_dock], [280], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.results_dock], [240], Qt.Orientation.Vertical)
+
+    def _restore_layout(self) -> None:
+        """Stellt Fenstergröße und Anordnung des letzten Laufs wieder her.
+
+        Wichtiger als jede von mir gewählte Startaufteilung: welche Verteilung sinnvoll ist,
+        hängt von Bildformat, Bildschirm und Arbeitsweise ab. Wer einmal angepasst hat, soll
+        das nicht bei jedem Start wiederholen müssen.
+        """
+        stored = settings()
+        geometry = stored.value("window/geometry")
+        state = stored.value("window/state")
+        if geometry:
+            self.restoreGeometry(geometry)
+        if state:
+            self.restoreState(state)
+
+    def _save_layout(self) -> None:
+        stored = settings()
+        stored.setValue("window/geometry", self.saveGeometry())
+        stored.setValue("window/state", self.saveState())
+
+    def _reset_layout(self) -> None:
+        """Verwirft die gespeicherte Anordnung und stellt die Startaufteilung wieder her."""
+        stored = settings()
+        stored.remove("window/geometry")
+        stored.remove("window/state")
+        self.resize(1200, 800)
+        self._apply_default_layout()
+        self.image_viewer.reset_layout()
+        logger.info("Fensteranordnung zurückgesetzt")
 
     def _update_export_step(self) -> None:
         """Der Export braucht beides: eine WCS-Lösung und mindestens einen bestätigten
@@ -596,6 +651,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Sitzung „{self._current_project.name}“ gespeichert.", 5000)
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        self._save_layout()
         if self._project_store is not None:
             self._project_store.close()
         super().closeEvent(event)
