@@ -6,7 +6,7 @@ import numpy as np
 from astropy.stats import sigma_clipped_stats
 from photutils.detection import find_peaks
 
-from core.synthetic_tracking import StackResult, VelocityVector
+from core.synthetic_tracking import StackResult, VelocityVector, crop_valid_region
 
 THUMBNAIL_SIZE = 32
 
@@ -39,20 +39,27 @@ def find_candidate_peaks(
     result: StackResult, snr_threshold: float = 5.0, box_size: int = 7
 ) -> list[Candidate]:
     """Findet alle lokalen SNR-Peaks oberhalb der Schwelle im gestackten Bild eines Vektors
-    (nicht nur das globale Maximum) — in einem Frame können mehrere Objekte auftauchen."""
+    (nicht nur das globale Maximum) — in einem Frame können mehrere Objekte auftauchen.
+
+    Die durch Zero-Padding beeinträchtigte Randzone des Vektors wird ausgeschlossen (wie in
+    core.synthetic_tracking.build_stack_result). Sonst verzerren die Randpixel die
+    Hintergrundstatistik unterschiedlich stark je nach Shift-Größe, und die SNR-Werte
+    verschiedener Vektoren wären nicht mehr vergleichbar — langsame (falsche) Vektoren
+    bekämen dadurch systematisch zu hohe Werte."""
     image = result.image
-    _, median, std = sigma_clipped_stats(image, sigma=3.0)
+    valid, row_offset, col_offset = crop_valid_region(image, result.border_margin)
+    _, median, std = sigma_clipped_stats(valid, sigma=3.0)
     if std <= 0:
         return []
 
     threshold = median + snr_threshold * std
-    peaks = find_peaks(image, threshold=threshold, box_size=box_size)
+    peaks = find_peaks(valid, threshold=threshold, box_size=box_size)
     if peaks is None or len(peaks) == 0:
         return []
 
     candidates = []
     for row in peaks:
-        position = (int(row["y_peak"]), int(row["x_peak"]))
+        position = (int(row["y_peak"]) + row_offset, int(row["x_peak"]) + col_offset)
         peak_value = float(row["peak_value"])
         snr = (peak_value - median) / std
         candidates.append(
@@ -81,37 +88,29 @@ def cluster_candidates(
     position_tolerance: float = 3.0,
     thumbnail_size: int = THUMBNAIL_SIZE,
 ) -> list[DetectionResult]:
-    """Fasst Kandidaten zusammen, die auf dasselbe Objekt treffen: ein echtes Objekt erzeugt
-    Peaks in mehreren benachbarten Gitterzellen des Vektor-Gitters (siehe PLAN.md Abschnitt 4,
-    Schritt 5), die als zusammenhängende "Wolke" über mehrere Pixel streuen können. Clustert
-    daher über transitive Nachbarschaft (Connected Components), nicht nur direkten Abstand zum
-    jeweils stärksten Treffer, und behält je Cluster den Kandidaten mit dem höchsten SNR."""
-    n = len(candidates)
-    positions = np.array([c.position for c in candidates], dtype=np.float64)
-    visited = np.zeros(n, dtype=bool)
-    components: list[list[int]] = []
+    """Reduziert Duplikate: ein echtes Objekt erzeugt Treffer in mehreren benachbarten
+    Gitterzellen des Vektor-Gitters (PLAN.md Abschnitt 4, Schritt 5). Behält iterativ den
+    jeweils stärksten verbliebenen Treffer und verwirft alle Treffer innerhalb von
+    `position_tolerance` um ihn herum (Non-Maximum-Suppression).
 
-    for start in range(n):
-        if visited[start]:
-            continue
-        visited[start] = True
-        component = [start]
-        pending = [start]
-        while pending:
-            current = pending.pop()
-            distances = np.hypot(
-                positions[:, 0] - positions[current, 0], positions[:, 1] - positions[current, 1]
-            )
-            neighbors = np.nonzero((distances <= position_tolerance) & ~visited)[0]
-            for neighbor in neighbors:
-                visited[neighbor] = True
-                component.append(int(neighbor))
-                pending.append(int(neighbor))
-        components.append(component)
+    Bewusst *keine* transitive Nachbarschaft (Single-Linkage): bei dichten Kandidatenfeldern
+    verkettet die sich über das gesamte Bild zu einem einzigen Cluster und lässt am Ende nur
+    den global stärksten Peak übrig — echte, weit entfernte Objekte gingen dabei verloren.
+    Non-Maximum-Suppression kann ein Objekt dagegen nur durch einen *nahen* stärkeren Treffer
+    verdrängen. Lieber ein Duplikat zu viel in der Liste (der Nutzer verwirft es) als ein
+    verlorenes Objekt."""
+    if not candidates:
+        return []
+
+    order = sorted(range(len(candidates)), key=lambda i: -candidates[i].snr)
+    positions = np.array([c.position for c in candidates], dtype=np.float64)
+    suppressed = np.zeros(len(candidates), dtype=bool)
 
     results = []
-    for component in components:
-        best = max((candidates[i] for i in component), key=lambda c: c.snr)
+    for index in order:
+        if suppressed[index]:
+            continue
+        best = candidates[index]
         results.append(
             DetectionResult(
                 vector=best.vector,
@@ -121,6 +120,11 @@ def cluster_candidates(
                 thumbnail=_extract_thumbnail(best.image, best.position, thumbnail_size),
             )
         )
+        distances = np.hypot(
+            positions[:, 0] - positions[index, 0], positions[:, 1] - positions[index, 1]
+        )
+        suppressed |= distances <= position_tolerance
+
     return sorted(results, key=lambda r: -r.snr)
 
 

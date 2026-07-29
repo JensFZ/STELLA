@@ -71,6 +71,71 @@ def test_find_candidate_peaks_respects_threshold():
     assert peaks_impossible == []
 
 
+def test_true_vector_outranks_neighbours_across_the_grid():
+    """Die SNR-Werte verschiedener Vektoren müssen vergleichbar sein: der tatsächlich
+    zutreffende Vektor muss am Objekt den höchsten SNR liefern. Ohne Ausschluss der
+    Zero-Padding-Randzone bekämen Vektoren mit kleinerem Shift zu gute Werte und würden
+    den wahren Vektor in der Kandidatenliste verdrängen."""
+    stack = _make_stack()
+    registered = _zero_shift_registered_stack(stack)
+
+    def best_snr_at_object(speed: float) -> float:
+        vector = VelocityVector(speed_arcsec_per_min=speed, angle_deg=OBJECT_A["angle"])
+        result = evaluate_vector(stack, registered, vector, PIXEL_SCALE_ARCSEC)
+        peaks = find_candidate_peaks(result, snr_threshold=3.0)
+        near = [
+            c
+            for c in peaks
+            if abs(c.position[0] - OBJECT_A["start"][1]) <= 3
+            and abs(c.position[1] - OBJECT_A["start"][0]) <= 3
+        ]
+        return max((c.snr for c in near), default=0.0)
+
+    true_speed = OBJECT_A["speed"]
+    assert best_snr_at_object(true_speed) > best_snr_at_object(true_speed - 1.0)
+    assert best_snr_at_object(true_speed) > best_snr_at_object(true_speed + 1.0)
+
+
+def test_cluster_candidates_does_not_chain_distant_objects_via_bridge():
+    """Regressionsschutz gegen Single-Linkage-Verkettung: zwei weit auseinander liegende
+    echte Objekte dürfen nicht verschmelzen, nur weil eine Kette schwacher Treffer sie
+    verbindet — sonst verschwindet das schwächere Objekt komplett aus der Kandidatenliste."""
+    from core.detection import Candidate
+
+    image = np.zeros((200, 200))
+    strong = Candidate(
+        vector=VelocityVector(1.0, 0.0),
+        position=(20, 20),
+        snr=500.0,
+        peak_value=5000.0,
+        image=image,
+    )
+    weak = Candidate(
+        vector=VelocityVector(2.0, 90.0),
+        position=(20, 120),
+        snr=80.0,
+        peak_value=800.0,
+        image=image,
+    )
+    # Lückenlose Brücke aus schwachen Treffern zwischen beiden Objekten (Abstand 2 px).
+    bridge = [
+        Candidate(
+            vector=VelocityVector(1.0, 0.0),
+            position=(20, col),
+            snr=10.0,
+            peak_value=100.0,
+            image=image,
+        )
+        for col in range(22, 120, 2)
+    ]
+
+    clustered = cluster_candidates([strong, weak, *bridge], position_tolerance=3.0)
+
+    positions = {d.position for d in clustered}
+    assert (20, 20) in positions, "starkes Objekt fehlt"
+    assert (20, 120) in positions, "schwaches Objekt wurde durch die Brücke verschluckt"
+
+
 def test_cluster_candidates_merges_nearby_duplicates():
     from core.detection import Candidate
 

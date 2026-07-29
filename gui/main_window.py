@@ -14,8 +14,11 @@ from core.detection import DetectionResult
 from core.io_fits import FrameStack
 from core.mpc_report import MPCObservation, write_mpc_report
 from core.project import Project, ProjectStore
+from core.synthetic_tracking import candidate_positions_per_frame
+from gui.views.astrometry_panel import AstrometryPanel
 from gui.views.astrometry_setup import AstrometrySetupDialog
 from gui.views.image_viewer import ImageViewer
+from gui.views.progress_panel import ProgressPanel
 from gui.views.project_dialog import OpenProjectDialog
 from gui.views.results_table import ResultsTable
 from gui.views.search_setup import SearchSetupDialog
@@ -35,18 +38,28 @@ class MainWindow(QMainWindow):
         self._stack: FrameStack | None = None
         self._registered: RegisteredStack | None = None
         self._astrometric_solution: AstrometricSolution | None = None
+        self._search_pixel_scale_arcsec: float | None = None
         self._project_store: ProjectStore | None = None
         self._current_project: Project | None = None
         self._restore_project_on_load: Project | None = None
         self.image_viewer = ImageViewer(self)
         self.setCentralWidget(self.image_viewer)
-        self.statusBar()
+
+        self.progress_panel = ProgressPanel(self)
+        self.progress_panel.cancel_requested.connect(self._cancel_detection)
+        self.statusBar().addPermanentWidget(self.progress_panel, 1)
 
         self.results_table = ResultsTable(self)
         self.results_dock = QDockWidget("Kandidaten", self)
         self.results_dock.setWidget(self.results_table)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.results_dock)
         self.results_dock.hide()
+
+        self.astrometry_panel = AstrometryPanel(self)
+        self.astrometry_dock = QDockWidget("Astrometrie", self)
+        self.astrometry_dock.setWidget(self.astrometry_panel)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.astrometry_dock)
+        self.astrometry_dock.hide()
 
         self._build_menu()
 
@@ -119,16 +132,14 @@ class MainWindow(QMainWindow):
 
     def _load_folder(self, folder: str) -> None:
         self._loader = FrameStackLoader(folder, self)
-        self._loader.progress.connect(self._on_load_progress)
+        self._loader.progress.connect(self.progress_panel.set_progress)
         self._loader.finished_loading.connect(self._on_load_finished)
         self._loader.failed.connect(self._on_load_failed)
-        self.statusBar().showMessage(f"Lade FITS-Frames aus {folder} ...")
+        self.progress_panel.start("FITS-Frames laden")
         self._loader.start()
 
-    def _on_load_progress(self, current: int, total: int) -> None:
-        self.statusBar().showMessage(f"Lade Frame {current} / {total} ...")
-
     def _on_load_finished(self, stack: FrameStack) -> None:
+        self.progress_panel.finish()
         self._stack = stack
         self.image_viewer.set_stack(stack)
         self.align_action.setEnabled(len(stack) > 1)
@@ -148,6 +159,7 @@ class MainWindow(QMainWindow):
                 )
 
     def _on_load_failed(self, message: str) -> None:
+        self.progress_panel.finish()
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler beim Laden", message)
 
@@ -155,17 +167,15 @@ class MainWindow(QMainWindow):
         if self._stack is None:
             return
         self._alignment_worker = AlignmentWorker(self._stack, reference_index=0, parent=self)
-        self._alignment_worker.progress.connect(self._on_align_progress)
+        self._alignment_worker.progress.connect(self.progress_panel.set_progress)
         self._alignment_worker.finished_alignment.connect(self._on_align_finished)
         self._alignment_worker.failed.connect(self._on_align_failed)
-        self.statusBar().showMessage("Erkenne Sterne und richte Frames aus ...")
+        self.progress_panel.start("Sterne erkennen und ausrichten")
         self.align_action.setEnabled(False)
         self._alignment_worker.start()
 
-    def _on_align_progress(self, current: int, total: int) -> None:
-        self.statusBar().showMessage(f"Sternerkennung: Frame {current} / {total} ...")
-
     def _on_align_finished(self, registered: RegisteredStack) -> None:
+        self.progress_panel.finish()
         self._registered = registered
         self.image_viewer.set_registered_stack(registered)
         self.align_action.setEnabled(True)
@@ -174,6 +184,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ausrichtung abgeschlossen.", 5000)
 
     def _on_align_failed(self, message: str) -> None:
+        self.progress_panel.finish()
         self.align_action.setEnabled(True)
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler bei der Ausrichtung", message)
@@ -185,26 +196,41 @@ class MainWindow(QMainWindow):
         if dialog.exec() != SearchSetupDialog.DialogCode.Accepted:
             return
 
+        params = dialog.parameters()
+        # Für die Positions-Rückrechnung beim MPC-Export wird derselbe Pixelmaßstab
+        # gebraucht, mit dem die Vektor-Geschwindigkeiten in Pixel umgerechnet wurden.
+        self._search_pixel_scale_arcsec = params["pixel_scale_arcsec"]
+
         self._detection_worker = DetectionWorker(
-            self._stack, self._registered, dialog.parameters(), parent=self
+            self._stack, self._registered, params, parent=self
         )
         self._detection_worker.status.connect(self._on_detect_status)
+        self._detection_worker.progress.connect(self.progress_panel.set_progress)
         self._detection_worker.finished_detection.connect(self._on_detect_finished)
         self._detection_worker.failed.connect(self._on_detect_failed)
         self.detect_action.setEnabled(False)
-        self.statusBar().showMessage("Suche wird vorbereitet ...")
+        self.progress_panel.start("Kandidatensuche", cancellable=True)
         self._detection_worker.start()
 
     def _on_detect_status(self, message: str) -> None:
-        self.statusBar().showMessage(message)
+        self.progress_panel.set_label(message)
+
+    def _cancel_detection(self) -> None:
+        if self._detection_worker is not None:
+            self._detection_worker.cancel()
 
     def _on_detect_finished(self, detections: list[DetectionResult]) -> None:
+        self.progress_panel.finish()
+        self.detect_action.setEnabled(True)
+        if not detections:
+            self.statusBar().showMessage("Keine Kandidaten gefunden.", 5000)
+            return
         self.results_table.set_detections(detections)
         self.results_dock.show()
-        self.detect_action.setEnabled(True)
         self.statusBar().showMessage(f"{len(detections)} Kandidat(en) gefunden.", 5000)
 
     def _on_detect_failed(self, message: str) -> None:
+        self.progress_panel.finish()
         self.detect_action.setEnabled(True)
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler bei der Kandidatensuche", message)
@@ -224,33 +250,28 @@ class MainWindow(QMainWindow):
         self._astrometry_worker = AstrometryWorker(
             reference_stars, reference_frame.data.shape, dialog.parameters(), parent=self
         )
-        self._astrometry_worker.status.connect(self._on_astrometry_status)
+        self._astrometry_worker.status.connect(self.progress_panel.set_label)
         self._astrometry_worker.finished_astrometry.connect(self._on_astrometry_finished)
         self._astrometry_worker.failed.connect(self._on_astrometry_failed)
         self.astrometry_action.setEnabled(False)
-        self.statusBar().showMessage("Astrometrie wird berechnet ...")
+        self.progress_panel.start("Astrometrie berechnen")
         self._astrometry_worker.start()
 
-    def _on_astrometry_status(self, message: str) -> None:
-        self.statusBar().showMessage(message)
-
     def _on_astrometry_finished(self, solution: AstrometricSolution) -> None:
+        self.progress_panel.finish()
         self._astrometric_solution = solution
         self.astrometry_action.setEnabled(True)
         self.export_mpc_action.setEnabled(True)
+        self.astrometry_panel.set_solution(solution)
+        self.astrometry_dock.show()
         self.statusBar().showMessage(
             f"Astrometrie: {solution.n_matches} Gaia-Matches, "
             f"RMS-Residuum {solution.rms_residual_arcsec:.3f}\"",
             8000,
         )
-        QMessageBox.information(
-            self,
-            "Astrometrie berechnet",
-            f"{solution.n_matches} Sterne gegen Gaia gematcht.\n"
-            f"RMS-Residuum des WCS-Fits: {solution.rms_residual_arcsec:.3f} arcsec",
-        )
 
     def _on_astrometry_failed(self, message: str) -> None:
+        self.progress_panel.finish()
         self.astrometry_action.setEnabled(True)
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Fehler bei der Astrometrie", message)
@@ -274,19 +295,40 @@ class MainWindow(QMainWindow):
         if not path:
             return
 
-        reference_time = self._registered[self._registered.reference_index].frame.obs_time
+        obs_times = [rf.frame.obs_time for rf in self._registered.frames]
+        # Bei einer aus der Datenbank wiederhergestellten Sitzung lief in diesem Fenster
+        # keine Suche — dann als bester verfügbarer Wert der Maßstab der gefitteten WCS.
+        pixel_scale = self._search_pixel_scale_arcsec
+        if pixel_scale is None:
+            reference_frame = self._registered[self._registered.reference_index].frame
+            estimate = estimate_field_center_and_scale(
+                self._astrometric_solution.wcs, reference_frame.data.shape
+            )
+            pixel_scale = estimate[2]
+
         observations = []
         for detection in confirmed:
-            ra_deg, dec_deg = pixel_to_sky(
-                self._astrometric_solution.wcs, detection.position[0], detection.position[1]
+            # Kernalgorithmus Schritt 6: Position des Kandidaten pro Frame zurückrechnen,
+            # damit der Report eine zeitlich verteilte Beobachtungsreihe enthält (eine
+            # Einzelposition reicht dem MPC nicht für eine Bahnbestimmung).
+            positions = candidate_positions_per_frame(
+                detection.position,
+                detection.vector,
+                obs_times,
+                self._registered.reference_index,
+                pixel_scale,
             )
-            observations.append(
-                MPCObservation(ra_deg=ra_deg, dec_deg=dec_deg, obs_time=reference_time)
-            )
+            for (row, col), obs_time in zip(positions, obs_times, strict=True):
+                ra_deg, dec_deg = pixel_to_sky(self._astrometric_solution.wcs, row, col)
+                observations.append(
+                    MPCObservation(ra_deg=ra_deg, dec_deg=dec_deg, obs_time=obs_time)
+                )
 
         write_mpc_report(observations, path)
         self.statusBar().showMessage(
-            f"MPC-Report mit {len(observations)} Beobachtung(en) gespeichert.", 5000
+            f"MPC-Report gespeichert: {len(observations)} Beobachtung(en) "
+            f"aus {len(confirmed)} Kandidat(en) über {len(obs_times)} Frames.",
+            5000,
         )
 
     def _get_project_store(self) -> ProjectStore:

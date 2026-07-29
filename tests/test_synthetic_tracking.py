@@ -8,6 +8,7 @@ from core.io_fits import FitsFrame, FrameStack
 from core.synthetic_tracking import (
     VelocityVector,
     build_velocity_grid,
+    candidate_positions_per_frame,
     evaluate_vector,
     frame_elapsed_minutes,
     search_velocity_grid,
@@ -100,3 +101,61 @@ def test_search_velocity_grid_finds_correct_vector_as_best():
 
     assert best.vector.speed_arcsec_per_min == pytest.approx(TRUE_SPEED, abs=1e-6)
     assert best.vector.angle_deg == pytest.approx(TRUE_ANGLE, abs=1e-6)
+
+
+def test_candidate_positions_per_frame_recovers_injected_track():
+    """Kernalgorithmus Schritt 6: aus gefundener Referenzposition + Vektor muss sich die
+    tatsächlich injizierte Spur des Objekts über alle Frames zurückrechnen lassen."""
+    stack = _make_moving_object_stack()
+    obs_times = [frame.obs_time for frame in stack.frames]
+
+    positions = candidate_positions_per_frame(
+        position=(START_Y, START_X),
+        vector=VelocityVector(speed_arcsec_per_min=TRUE_SPEED, angle_deg=TRUE_ANGLE),
+        obs_times=obs_times,
+        reference_index=0,
+        pixel_scale_arcsec=PIXEL_SCALE_ARCSEC,
+    )
+
+    assert len(positions) == N_FRAMES
+    for index, (row, col) in enumerate(positions):
+        # _make_moving_object_stack injiziert das Objekt bei START_X + TRUE_SPEED * index.
+        assert row == pytest.approx(START_Y, abs=1e-9)
+        assert col == pytest.approx(START_X + TRUE_SPEED * index, abs=1e-9)
+
+
+def test_candidate_positions_per_frame_respects_reference_index():
+    """Bezugspunkt ist der Referenzframe: dort muss die Position unverändert bleiben, davor
+    liegende Frames müssen zurück-, spätere vorwärtsgerechnet werden."""
+    stack = _make_moving_object_stack()
+    obs_times = [frame.obs_time for frame in stack.frames]
+    reference_index = 2
+
+    positions = candidate_positions_per_frame(
+        position=(START_Y, START_X),
+        vector=VelocityVector(speed_arcsec_per_min=TRUE_SPEED, angle_deg=TRUE_ANGLE),
+        obs_times=obs_times,
+        reference_index=reference_index,
+        pixel_scale_arcsec=PIXEL_SCALE_ARCSEC,
+    )
+
+    assert positions[reference_index][1] == pytest.approx(START_X, abs=1e-9)
+    assert positions[0][1] == pytest.approx(START_X - 2 * TRUE_SPEED, abs=1e-9)
+    assert positions[-1][1] == pytest.approx(START_X + 2 * TRUE_SPEED, abs=1e-9)
+
+
+def test_candidate_positions_per_frame_scales_with_pixel_scale():
+    """Bei doppeltem Pixelmaßstab (arcsec/px) legt dieselbe Winkelgeschwindigkeit halb so
+    viele Pixel pro Minute zurück."""
+    stack = _make_moving_object_stack()
+    obs_times = [frame.obs_time for frame in stack.frames]
+
+    positions = candidate_positions_per_frame(
+        position=(START_Y, START_X),
+        vector=VelocityVector(speed_arcsec_per_min=TRUE_SPEED, angle_deg=TRUE_ANGLE),
+        obs_times=obs_times,
+        reference_index=0,
+        pixel_scale_arcsec=2.0 * PIXEL_SCALE_ARCSEC,
+    )
+
+    assert positions[1][1] == pytest.approx(START_X + TRUE_SPEED / 2.0, abs=1e-9)

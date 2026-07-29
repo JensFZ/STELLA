@@ -26,6 +26,10 @@ class StackResult:
     peak_value: float
     peak_position: tuple[int, int]  # (row, col)
     snr: float
+    #: Breite der durch Zero-Padding beeinträchtigten Randzone dieses Vektors. Nachgelagerte
+    #: Auswertung (core.detection) muss dieselbe Zone ausschließen, sonst sind die SNR-Werte
+    #: verschiedener Vektoren nicht vergleichbar.
+    border_margin: int = 0
 
 
 def build_velocity_grid(
@@ -60,6 +64,30 @@ def _vector_pixel_shift(
     dx = speed_px_per_min * elapsed_minutes * np.cos(angle_rad)
     dy = speed_px_per_min * elapsed_minutes * np.sin(angle_rad)
     return dx, dy
+
+
+def candidate_positions_per_frame(
+    position: tuple[float, float],
+    vector: VelocityVector,
+    obs_times: list[str],
+    reference_index: int,
+    pixel_scale_arcsec: float,
+) -> list[tuple[float, float]]:
+    """Rechnet die (row, col)-Position eines Kandidaten für jeden Frame zurück (PLAN.md
+    Abschnitt 4, Schritt 6). `position` ist die im Stack gefundene Position im Referenzframe.
+
+    Bewusst *ohne* den Stern-Alignment-Anteil: dieser kompensiert nur die Teleskop-Drift
+    zwischen den Aufnahmen. Die Positionen beziehen sich daher auf das sternfeld-feste
+    Referenzraster — genau das Raster, auf das auch der Gaia-WCS-Fit passt, sodass die
+    Ergebnisse direkt über die WCS in RA/Dec umgerechnet werden können."""
+    elapsed = frame_elapsed_minutes(obs_times, reference_index)
+    row, col = position
+
+    positions = []
+    for elapsed_minutes in elapsed:
+        obj_dx, obj_dy = _vector_pixel_shift(vector, elapsed_minutes, pixel_scale_arcsec)
+        positions.append((row + obj_dy, col + obj_dx))
+    return positions
 
 
 def per_frame_total_shifts(
@@ -155,6 +183,7 @@ def build_stack_result(vector: VelocityVector, image: np.ndarray, margin: int) -
         peak_value=peak_value,
         peak_position=(int(peak_index[0] + row_offset), int(peak_index[1] + col_offset)),
         snr=float(snr),
+        border_margin=margin,
     )
 
 

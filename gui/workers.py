@@ -93,8 +93,14 @@ class DetectionWorker(QThread):
     einer Kandidatenliste."""
 
     status = Signal(str)
+    progress = Signal(int, int)
     finished_detection = Signal(list)
     failed = Signal(str)
+
+    #: Anzahl Vektoren pro Durchlauf. Die Gittersuche wird in Blöcken abgearbeitet, damit
+    #: überhaupt Fortschritt gemeldet werden kann (die Suche kann Minuten dauern) und damit
+    #: der GPU-Batch-Tensor (n_vektoren x n_frames x H x W) nicht beliebig groß wird.
+    CHUNK_SIZE = 16
 
     def __init__(
         self,
@@ -107,6 +113,11 @@ class DetectionWorker(QThread):
         self._stack = stack
         self._registered = registered
         self._params = params
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """Bricht die Suche nach dem aktuellen Block ab."""
+        self._cancelled = True
 
     def run(self) -> None:
         try:
@@ -115,15 +126,24 @@ class DetectionWorker(QThread):
                 speed_step_arcsec_per_min=self._params["speed_step_arcsec_per_min"],
                 angle_step_deg=self._params["angle_step_deg"],
             )
-            self.status.emit(f"Durchsuche {len(grid)} Bewegungsvektoren ...")
+            total = len(grid)
+            self.status.emit(f"Durchsuche {total} Bewegungsvektoren ...")
+            self.progress.emit(0, total)
 
             pixel_scale = self._params["pixel_scale_arcsec"]
-            if self._params["use_gpu"]:
-                results = search_velocity_grid_torch(
-                    self._stack, self._registered, grid, pixel_scale
-                )
-            else:
-                results = search_velocity_grid(self._stack, self._registered, grid, pixel_scale)
+            search = (
+                search_velocity_grid_torch if self._params["use_gpu"] else search_velocity_grid
+            )
+
+            results = []
+            for start in range(0, total, self.CHUNK_SIZE):
+                if self._cancelled:
+                    self.status.emit("Suche abgebrochen.")
+                    self.finished_detection.emit([])
+                    return
+                chunk = grid[start : start + self.CHUNK_SIZE]
+                results.extend(search(self._stack, self._registered, chunk, pixel_scale))
+                self.progress.emit(min(start + self.CHUNK_SIZE, total), total)
 
             self.status.emit("Gruppiere Treffer ...")
             detections: list[DetectionResult] = detect_candidates(
