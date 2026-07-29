@@ -21,7 +21,7 @@ class AstrometrySetupDialog(QDialog):
         prefill: tuple[float, float, float] | None = None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Astrometrie berechnen")
+        self.setWindowTitle(self.tr("Astrometrie berechnen"))
 
         center_ra, center_dec, pixel_scale = prefill or (0.0, 0.0, 1.0)
 
@@ -59,17 +59,19 @@ class AstrometrySetupDialog(QDialog):
         self.match_tolerance_spin.setSuffix(" arcsec")
 
         form = QFormLayout()
-        form.addRow("Feldzentrum RA:", self.center_ra_spin)
-        form.addRow("Feldzentrum Dec:", self.center_dec_spin)
-        form.addRow("Pixelmaßstab:", self.pixel_scale_spin)
-        form.addRow("Suchradius:", self.radius_spin)
-        form.addRow("Grenzmagnitude (Gaia G):", self.mag_limit_spin)
-        form.addRow("Match-Toleranz:", self.match_tolerance_spin)
+        form.addRow(self.tr("Feldzentrum RA:"), self.center_ra_spin)
+        form.addRow(self.tr("Feldzentrum Dec:"), self.center_dec_spin)
+        form.addRow(self.tr("Pixelmaßstab:"), self.pixel_scale_spin)
+        form.addRow(self.tr("Suchradius:"), self.radius_spin)
+        form.addRow(self.tr("Grenzmagnitude (Gaia G):"), self.mag_limit_spin)
+        form.addRow(self.tr("Match-Toleranz:"), self.match_tolerance_spin)
         if prefill is None:
             form.addRow(
                 QLabel(
-                    "Kein WCS im FITS-Header gefunden — bitte Feldzentrum und\n"
-                    "Pixelmaßstab manuell eingeben.",
+                    self.tr(
+                        "Kein WCS im FITS-Header gefunden — bitte Feldzentrum und\n"
+                        "Pixelmaßstab manuell eingeben."
+                    ),
                     self,
                 )
             )

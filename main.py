@@ -12,6 +12,7 @@ install_excepthook()
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from core.i18n import install_translator  # noqa: E402
 from gui.main_window import MainWindow  # noqa: E402
 
 
@@ -21,6 +22,11 @@ def main() -> int:
     log_environment()
 
     app = QApplication(sys.argv)
+    # Muss vor dem Aufbau der Oberfläche geschehen: Beschriftungen werden beim Erzeugen
+    # der Widgets übersetzt, ein späteres Installieren käme zu spät.
+    language = install_translator(app)
+    logger.info("Oberflächensprache: %s", language)
+
     window = MainWindow()
     window.show()
 

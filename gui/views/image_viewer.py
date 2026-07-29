@@ -80,27 +80,27 @@ class ImageViewer(QWidget):
         self.frame_slider.setMaximum(0)
         self.frame_slider.valueChanged.connect(self.set_frame_index)
 
-        self.frame_label = QLabel("Keine Frames geladen", self)
+        self.frame_label = QLabel(self.tr("Keine Frames geladen"), self)
 
         self.low_pct_spin = QDoubleSpinBox(self)
         self.low_pct_spin.setRange(0.0, 49.0)
         self.low_pct_spin.setValue(1.0)
         self.low_pct_spin.setSuffix(" %")
-        self.low_pct_spin.setPrefix("Schwarzpunkt ")
+        self.low_pct_spin.setPrefix(self.tr("Schwarzpunkt "))
         self.low_pct_spin.valueChanged.connect(self._update_display)
 
         self.high_pct_spin = QDoubleSpinBox(self)
         self.high_pct_spin.setRange(51.0, 100.0)
         self.high_pct_spin.setValue(99.5)
         self.high_pct_spin.setSuffix(" %")
-        self.high_pct_spin.setPrefix("Weißpunkt ")
+        self.high_pct_spin.setPrefix(self.tr("Weißpunkt "))
         self.high_pct_spin.valueChanged.connect(self._update_display)
 
-        self.blink_button = QPushButton("Blink", self)
+        self.blink_button = QPushButton(self.tr("Blink"), self)
         self.blink_button.setCheckable(True)
         self.blink_button.toggled.connect(self._toggle_blink)
 
-        self.star_overlay_button = QPushButton("Sterne anzeigen", self)
+        self.star_overlay_button = QPushButton(self.tr("Sterne anzeigen"), self)
         self.star_overlay_button.setCheckable(True)
         self.star_overlay_button.setEnabled(False)
         self.star_overlay_button.toggled.connect(self._update_display)
@@ -163,7 +163,7 @@ class ImageViewer(QWidget):
             self.thumbnail_list.setCurrentRow(0)
             self._update_display()
         else:
-            self.frame_label.setText("Keine Frames gefunden")
+            self.frame_label.setText(self.tr("Keine Frames gefunden"))
 
     def set_registered_stack(self, registered: RegisteredStack) -> None:
         self._registered = registered

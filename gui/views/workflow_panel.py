@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QCoreApplication, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QLabel,
@@ -118,20 +118,25 @@ class WorkflowPanel(QWidget):
     STEP_ASTROMETRY = 3
     STEP_EXPORT = 4
 
-    TITLES = [
-        "FITS-Ordner laden",
-        "Sterne erkennen & ausrichten",
-        "Kandidaten suchen",
-        "Astrometrie berechnen",
-        "MPC-Report exportieren",
-    ]
+    @staticmethod
+    def titles() -> list[str]:
+        """Als Funktion statt als Konstante: eine Klassenkonstante würde beim Import
+        ausgewertet, also bevor die Übersetzung installiert ist."""
+        translate = QCoreApplication.translate
+        return [
+            translate("WorkflowPanel", "FITS-Ordner laden"),
+            translate("WorkflowPanel", "Sterne erkennen & ausrichten"),
+            translate("WorkflowPanel", "Kandidaten suchen"),
+            translate("WorkflowPanel", "Astrometrie berechnen"),
+            translate("WorkflowPanel", "MPC-Report exportieren"),
+        ]
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.setFixedWidth(240)
 
-        heading = QLabel("Arbeitsablauf", self)
+        heading = QLabel(self.tr("Arbeitsablauf"), self)
         heading.setStyleSheet("font-weight: 600; padding: 10px 10px 4px 10px;")
 
         layout = QVBoxLayout(self)
@@ -140,7 +145,7 @@ class WorkflowPanel(QWidget):
         layout.addWidget(heading)
 
         self._rows: list[_StepRow] = []
-        for index, title in enumerate(self.TITLES):
+        for index, title in enumerate(self.titles()):
             row = _StepRow(index + 1, title, self)
             row.activated.connect(lambda i=index: self.step_activated.emit(i))
             self._rows.append(row)

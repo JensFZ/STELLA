@@ -9,6 +9,8 @@ das Bundle enthält PyTorch und ist mehrere hundert MB groß, ein Ein-Datei-Buil
 müsste das bei jedem Start erst entpacken und würde entsprechend lange brauchen.
 """
 
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 datas = []
@@ -35,6 +37,11 @@ for package in ("photutils", "astroquery"):
 
 # pyerfa bringt Zeit-/Koordinaten-Tabellen mit, die astropy zur Laufzeit erwartet.
 datas += collect_data_files("erfa")
+
+# Kompilierte Übersetzungen. Ohne sie bliebe die Oberfläche im gebauten Paket immer in der
+# Quellsprache, obwohl die Sprachwahl im Menü angeboten wird. Die .ts-Quelldateien werden
+# bewusst nicht mitgeliefert — sie werden nur zum Erzeugen der .qm gebraucht.
+datas += [(str(Path("i18n") / "stella_en.qm"), "i18n")]
 
 # Ausschlüsse sind bewusst zurückhaltend gehalten. Ein Ausschluss spart nur dann Platz,
 # wenn das Modul wirklich ungenutzt ist — importiert das Paket es intern, bricht die

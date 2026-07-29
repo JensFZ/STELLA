@@ -10,10 +10,11 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from core.detection import DetectionResult  # noqa: E402
 from core.synthetic_tracking import VelocityVector  # noqa: E402
 from gui.views.results_table import (  # noqa: E402
+    CONFIRMED_ROLE,
     DETECTION_ROLE,
     STATUS_COLUMN,
-    STATUS_OPTIONS,
     ResultsTable,
+    status_label,
 )
 
 
@@ -67,7 +68,7 @@ def test_status_stays_with_its_candidate_after_sorting():
 
     # Nach absteigender SNR-Sortierung steht 'high' in Zeile 0 -> dort auf Bestätigt setzen.
     assert table.table.item(0, STATUS_COLUMN).data(DETECTION_ROLE) is high
-    table.table.item(0, STATUS_COLUMN).setText(STATUS_OPTIONS[1])
+    table.table.item(0, STATUS_COLUMN).setData(CONFIRMED_ROLE, True)
     assert high.confirmed is True
     assert low.confirmed is None
 
@@ -75,12 +76,12 @@ def test_status_stays_with_its_candidate_after_sorting():
     table.table.sortItems(4, Qt.SortOrder.AscendingOrder)
 
     assert table.table.item(1, STATUS_COLUMN).data(DETECTION_ROLE) is high
-    assert table.table.item(1, STATUS_COLUMN).text() == STATUS_OPTIONS[1]
+    assert table.table.item(1, STATUS_COLUMN).data(CONFIRMED_ROLE) is True
     assert table.table.item(0, STATUS_COLUMN).data(DETECTION_ROLE) is low
-    assert table.table.item(0, STATUS_COLUMN).text() == STATUS_OPTIONS[0]
+    assert table.table.item(0, STATUS_COLUMN).data(CONFIRMED_ROLE) is None
 
     # Und ein Statuswechsel nach dem Sortieren trifft weiterhin den richtigen Kandidaten.
-    table.table.item(0, STATUS_COLUMN).setText(STATUS_OPTIONS[2])
+    table.table.item(0, STATUS_COLUMN).setData(CONFIRMED_ROLE, False)
     assert low.confirmed is False
     assert high.confirmed is True
 
@@ -91,7 +92,9 @@ def test_existing_confirmed_state_is_shown_on_load():
 
     table.set_detections([_make_detection(50.0, 1.0, confirmed=True)])
 
-    assert table.table.item(0, STATUS_COLUMN).text() == STATUS_OPTIONS[1]
+    item = table.table.item(0, STATUS_COLUMN)
+    assert item.data(CONFIRMED_ROLE) is True
+    assert item.text() == status_label(True)
 
 
 def test_detections_accessor_returns_all_candidates():

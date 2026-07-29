@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from core.alignment import RegisteredStack
 from core.astrometry import AstrometricSolution, estimate_field_center_and_scale, pixel_to_sky
 from core.detection import DetectionResult
+from core.i18n import SUPPORTED_LANGUAGES, current_language, save_language
 from core.io_fits import FolderScan, FrameStack, group_into_sessions
 from core.logging_setup import log_file_path
 from core.mpc_report import MPCObservation, write_mpc_report
@@ -88,13 +89,13 @@ class MainWindow(QMainWindow):
 
         self.results_table = ResultsTable(self)
         self.results_table.confirmation_changed.connect(self._update_export_step)
-        self.results_dock = QDockWidget("Kandidaten", self)
+        self.results_dock = QDockWidget(self.tr("Kandidaten"), self)
         self.results_dock.setWidget(self.results_table)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.results_dock)
         self.results_dock.hide()
 
         self.astrometry_panel = AstrometryPanel(self)
-        self.astrometry_dock = QDockWidget("Astrometrie", self)
+        self.astrometry_dock = QDockWidget(self.tr("Astrometrie"), self)
         self.astrometry_dock.setWidget(self.astrometry_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.astrometry_dock)
         self.astrometry_dock.hide()
@@ -104,59 +105,89 @@ class MainWindow(QMainWindow):
     def _build_menu(self) -> None:
         menu_bar = self.menuBar()
 
-        file_menu = menu_bar.addMenu("&Datei")
-        open_action = QAction("FITS-Ordner öffnen...", self)
+        file_menu = menu_bar.addMenu(self.tr("&Datei"))
+        open_action = QAction(self.tr("FITS-Ordner öffnen..."), self)
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self._open_fits_folder)
         file_menu.addAction(open_action)
         file_menu.addSeparator()
-        exit_action = QAction("Beenden", self)
+        exit_action = QAction(self.tr("Beenden"), self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        project_menu = menu_bar.addMenu("&Projekt")
-        new_project_action = QAction("Neues Projekt...", self)
+        project_menu = menu_bar.addMenu(self.tr("&Projekt"))
+        new_project_action = QAction(self.tr("Neues Projekt..."), self)
         new_project_action.triggered.connect(self._new_project)
         project_menu.addAction(new_project_action)
 
-        open_project_action = QAction("Projekt öffnen...", self)
+        open_project_action = QAction(self.tr("Projekt öffnen..."), self)
         open_project_action.triggered.connect(self._open_project)
         project_menu.addAction(open_project_action)
 
-        self.save_session_action = QAction("Sitzung speichern", self)
+        self.save_session_action = QAction(self.tr("Sitzung speichern"), self)
         self.save_session_action.setEnabled(False)
         self.save_session_action.triggered.connect(self._save_session)
         project_menu.addAction(self.save_session_action)
         project_menu.addSeparator()
-        self.align_action = QAction("Sterne erkennen && ausrichten...", self)
+        self.align_action = QAction(self.tr("Sterne erkennen && ausrichten..."), self)
         self.align_action.setEnabled(False)
         self.align_action.triggered.connect(self._run_alignment)
         project_menu.addAction(self.align_action)
 
-        self.detect_action = QAction("Kandidaten suchen...", self)
+        self.detect_action = QAction(self.tr("Kandidaten suchen..."), self)
         self.detect_action.setEnabled(False)
         self.detect_action.triggered.connect(self._open_search_setup)
         project_menu.addAction(self.detect_action)
 
         project_menu.addSeparator()
-        self.astrometry_action = QAction("Astrometrie berechnen...", self)
+        self.astrometry_action = QAction(self.tr("Astrometrie berechnen..."), self)
         self.astrometry_action.setEnabled(False)
         self.astrometry_action.triggered.connect(self._open_astrometry_setup)
         project_menu.addAction(self.astrometry_action)
 
-        self.export_mpc_action = QAction("MPC-Report exportieren...", self)
+        self.export_mpc_action = QAction(self.tr("MPC-Report exportieren..."), self)
         self.export_mpc_action.setEnabled(False)
         self.export_mpc_action.triggered.connect(self._export_mpc_report)
         project_menu.addAction(self.export_mpc_action)
 
-        help_menu = menu_bar.addMenu("&Hilfe")
-        show_log_action = QAction("Logdatei anzeigen", self)
+        language_menu = menu_bar.addMenu(self.tr("&Sprache"))
+        language_group = QActionGroup(self)
+        language_group.setExclusive(True)
+        for code, name in SUPPORTED_LANGUAGES.items():
+            action = QAction(name, self)
+            action.setCheckable(True)
+            action.setChecked(code == current_language())
+            action.triggered.connect(lambda _checked, c=code: self._change_language(c))
+            language_group.addAction(action)
+            language_menu.addAction(action)
+
+        help_menu = menu_bar.addMenu(self.tr("&Hilfe"))
+        show_log_action = QAction(self.tr("Logdatei anzeigen"), self)
         show_log_action.triggered.connect(self._show_log_file)
         help_menu.addAction(show_log_action)
         help_menu.addSeparator()
-        about_action = QAction("Über STELLA", self)
+        about_action = QAction(self.tr("Über STELLA"), self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    def _change_language(self, language: str) -> None:
+        """Speichert die Sprachwahl und bittet um einen Neustart.
+
+        Ein Wechsel im laufenden Programm würde erfordern, dass jedes Fenster und jeder
+        Dialog seine Beschriftungen neu setzt. Der Neustart ist hier der ehrlichere Weg —
+        er lässt keine halb übersetzte Oberfläche zurück.
+        """
+        if language == current_language():
+            return
+        save_language(language)
+        logger.info("Sprache gewechselt auf %s (wirksam nach Neustart)", language)
+        QMessageBox.information(
+            self,
+            self.tr("Sprache geändert"),
+            self.tr(
+                "Die Sprache wird beim nächsten Start von STELLA verwendet."
+            ),
+        )
 
     def _show_log_file(self) -> None:
         """Öffnet den Ordner mit der Logdatei im Dateimanager. Bewusst der Ordner und nicht
@@ -165,7 +196,11 @@ class MainWindow(QMainWindow):
         path = log_file_path()
         if not path.exists():
             QMessageBox.information(
-                self, "Logdatei", f"Noch keine Logdatei vorhanden.\nErwartet unter:\n{path}"
+                self,
+                self.tr("Logdatei"),
+                self.tr("Noch keine Logdatei vorhanden.\nErwartet unter:\n{path}").format(
+                    path=path
+                ),
             )
             return
         try:
@@ -177,14 +212,20 @@ class MainWindow(QMainWindow):
                 subprocess.run(["xdg-open", str(path.parent)], check=False)
         except Exception:  # noqa: BLE001
             logger.exception("Logordner konnte nicht geöffnet werden")
-            QMessageBox.information(self, "Logdatei", f"Die Logdatei liegt unter:\n{path}")
+            QMessageBox.information(
+                self,
+                self.tr("Logdatei"),
+                self.tr("Die Logdatei liegt unter:\n{path}").format(path=path),
+            )
 
     def _show_about(self) -> None:
         QMessageBox.about(
             self,
-            "Über STELLA",
-            "STELLA — Synthetic Tracking Engine for Locating & Logging Asteroids\n"
-            "Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion.",
+            self.tr("Über STELLA"),
+            self.tr(
+                "STELLA — Synthetic Tracking Engine for Locating & Logging Asteroids\n"
+                "Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion."
+            ),
         )
 
     def _update_export_step(self) -> None:
@@ -203,11 +244,13 @@ class MainWindow(QMainWindow):
 
         missing = []
         if not has_solution:
-            missing.append("Astrometrie")
+            missing.append(self.tr("Astrometrie"))
         if not confirmed:
-            missing.append("bestätigte Kandidaten")
+            missing.append(self.tr("bestätigte Kandidaten"))
         self.workflow_panel.set_state(
-            WorkflowPanel.STEP_EXPORT, StepState.LOCKED, "fehlt: " + " und ".join(missing)
+            WorkflowPanel.STEP_EXPORT,
+            StepState.LOCKED,
+            self.tr("fehlt: {what}").format(what=self.tr(" und ").join(missing)),
         )
 
     def _on_workflow_step(self, step: int) -> None:
@@ -222,7 +265,7 @@ class MainWindow(QMainWindow):
         handlers[step]()
 
     def _open_fits_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "FITS-Ordner öffnen")
+        folder = QFileDialog.getExistingDirectory(self, self.tr("FITS-Ordner öffnen"))
         if not folder:
             return
         self._load_folder(folder)
@@ -233,7 +276,7 @@ class MainWindow(QMainWindow):
         self._scan_worker = FolderScanWorker(folder, parent=self)
         self._scan_worker.finished_scan.connect(self._on_scan_finished)
         self._scan_worker.failed.connect(self._on_load_failed)
-        self.progress_panel.start("Ordner analysieren")
+        self.progress_panel.start(self.tr("Ordner analysieren"))
         self._scan_worker.start()
 
     def _on_scan_finished(self, scan: FolderScan) -> None:
@@ -245,7 +288,7 @@ class MainWindow(QMainWindow):
             # Bei mehreren Serien entscheidet der Nutzer; vorausgewählt ist die längste.
             dialog = SessionSelectDialog(scan, parent=self)
             if dialog.exec() != SessionSelectDialog.DialogCode.Accepted:
-                self.statusBar().showMessage("Laden abgebrochen.", 5000)
+                self.statusBar().showMessage(self.tr("Laden abgebrochen."), 5000)
                 return
             session_index = dialog.selected_session_index()
 
@@ -254,7 +297,7 @@ class MainWindow(QMainWindow):
         self._loader.progress.connect(self.progress_panel.set_progress)
         self._loader.finished_loading.connect(self._on_load_finished)
         self._loader.failed.connect(self._on_load_failed)
-        self.progress_panel.start("FITS-Frames laden")
+        self.progress_panel.start(self.tr("FITS-Frames laden"))
         self._loader.start()
 
     def _on_load_finished(self, stack: FrameStack) -> None:
@@ -297,7 +340,7 @@ class MainWindow(QMainWindow):
     def _on_load_failed(self, message: str) -> None:
         self.progress_panel.finish()
         self.statusBar().clearMessage()
-        QMessageBox.critical(self, "Fehler beim Laden", message)
+        QMessageBox.critical(self, self.tr("Fehler beim Laden"), message)
 
     def _run_alignment(self) -> None:
         if self._stack is None:
@@ -306,7 +349,7 @@ class MainWindow(QMainWindow):
         self._alignment_worker.progress.connect(self.progress_panel.set_progress)
         self._alignment_worker.finished_alignment.connect(self._on_align_finished)
         self._alignment_worker.failed.connect(self._on_align_failed)
-        self.progress_panel.start("Sterne erkennen und ausrichten")
+        self.progress_panel.start(self.tr("Sterne erkennen und ausrichten"))
         self.align_action.setEnabled(False)
         self._alignment_worker.start()
 
@@ -317,7 +360,7 @@ class MainWindow(QMainWindow):
         self.align_action.setEnabled(True)
         self.detect_action.setEnabled(True)
         self.astrometry_action.setEnabled(True)
-        self.statusBar().showMessage("Ausrichtung abgeschlossen.", 5000)
+        self.statusBar().showMessage(self.tr("Ausrichtung abgeschlossen."), 5000)
 
         stars = len(registered[registered.reference_index].stars)
         max_shift = max(
@@ -335,7 +378,7 @@ class MainWindow(QMainWindow):
         self.progress_panel.finish()
         self.align_action.setEnabled(True)
         self.statusBar().clearMessage()
-        QMessageBox.critical(self, "Fehler bei der Ausrichtung", message)
+        QMessageBox.critical(self, self.tr("Fehler bei der Ausrichtung"), message)
 
     def _open_search_setup(self) -> None:
         if self._stack is None or self._registered is None:
@@ -359,7 +402,7 @@ class MainWindow(QMainWindow):
         self._detection_worker.finished_detection.connect(self._on_detect_finished)
         self._detection_worker.failed.connect(self._on_detect_failed)
         self.detect_action.setEnabled(False)
-        self.progress_panel.start("Kandidatensuche", cancellable=True)
+        self.progress_panel.start(self.tr("Kandidatensuche"), cancellable=True)
         self._detection_worker.start()
 
     def _on_detect_status(self, message: str) -> None:
@@ -373,9 +416,9 @@ class MainWindow(QMainWindow):
         self.progress_panel.finish()
         self.detect_action.setEnabled(True)
         if not detections:
-            self.statusBar().showMessage("Keine Kandidaten gefunden.", 5000)
+            self.statusBar().showMessage(self.tr("Keine Kandidaten gefunden."), 5000)
             self.workflow_panel.set_state(
-                WorkflowPanel.STEP_DETECT, StepState.AVAILABLE, "keine Kandidaten"
+                WorkflowPanel.STEP_DETECT, StepState.AVAILABLE, self.tr("keine Kandidaten")
             )
             return
         self.results_table.set_detections(detections)
@@ -390,7 +433,7 @@ class MainWindow(QMainWindow):
         self.progress_panel.finish()
         self.detect_action.setEnabled(True)
         self.statusBar().clearMessage()
-        QMessageBox.critical(self, "Fehler bei der Kandidatensuche", message)
+        QMessageBox.critical(self, self.tr("Fehler bei der Kandidatensuche"), message)
 
     def _open_astrometry_setup(self) -> None:
         if self._registered is None:
@@ -411,7 +454,7 @@ class MainWindow(QMainWindow):
         self._astrometry_worker.finished_astrometry.connect(self._on_astrometry_finished)
         self._astrometry_worker.failed.connect(self._on_astrometry_failed)
         self.astrometry_action.setEnabled(False)
-        self.progress_panel.start("Astrometrie berechnen")
+        self.progress_panel.start(self.tr("Astrometrie berechnen"))
         self._astrometry_worker.start()
 
     def _on_astrometry_finished(self, solution: AstrometricSolution) -> None:
@@ -437,7 +480,7 @@ class MainWindow(QMainWindow):
         self.progress_panel.finish()
         self.astrometry_action.setEnabled(True)
         self.statusBar().clearMessage()
-        QMessageBox.critical(self, "Fehler bei der Astrometrie", message)
+        QMessageBox.critical(self, self.tr("Fehler bei der Astrometrie"), message)
 
     def _export_mpc_report(self) -> None:
         if self._astrometric_solution is None or self._registered is None:
@@ -446,14 +489,14 @@ class MainWindow(QMainWindow):
         if not confirmed:
             QMessageBox.warning(
                 self,
-                "Keine bestätigten Kandidaten",
+                self.tr("Keine bestätigten Kandidaten"),
                 "Bitte zunächst mindestens einen Kandidaten in der Tabelle als "
                 '"Bestätigt" markieren.',
             )
             return
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "MPC-Report speichern", "report.txt", "Textdateien (*.txt)"
+            self, self.tr("MPC-Report speichern"), "report.txt", self.tr("Textdateien (*.txt)")
         )
         if not path:
             return
@@ -509,7 +552,7 @@ class MainWindow(QMainWindow):
         return self._project_store
 
     def _new_project(self) -> None:
-        name, ok = QInputDialog.getText(self, "Neues Projekt", "Projektname:")
+        name, ok = QInputDialog.getText(self, self.tr("Neues Projekt"), self.tr("Projektname:"))
         if not ok or not name.strip():
             return
         folder = QFileDialog.getExistingDirectory(self, "FITS-Ordner öffnen")

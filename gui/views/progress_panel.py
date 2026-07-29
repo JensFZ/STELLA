@@ -25,7 +25,7 @@ class ProgressPanel(QWidget):
         self.bar.setMaximum(1)
         self.bar.setValue(0)
 
-        self.cancel_button = QPushButton("Abbrechen", self)
+        self.cancel_button = QPushButton(self.tr("Abbrechen"), self)
         self.cancel_button.clicked.connect(self._on_cancel_clicked)
 
         layout = QHBoxLayout(self)
@@ -63,5 +63,5 @@ class ProgressPanel(QWidget):
 
     def _on_cancel_clicked(self) -> None:
         self.cancel_button.setEnabled(False)
-        self.label.setText("Abbruch angefordert ...")
+        self.label.setText(self.tr("Abbruch angefordert ..."))
         self.cancel_requested.emit()

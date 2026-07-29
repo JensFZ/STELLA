@@ -129,6 +129,20 @@ Nur die längste Serie wird verwendet (1164 Frames ab 2025-02-16T23:01)
 Lade 258 Frames der Größe (1920, 1080) (~2.0 GB)
 ```
 
+## Sprache
+
+Die Oberfläche gibt es auf Deutsch und Englisch, umschaltbar im Menü *Sprache*. Ohne
+Einstellung folgt STELLA der Systemsprache. Die Umschaltung wirkt beim nächsten Start.
+
+Zum Testen lässt sich die Sprache erzwingen:
+
+```bash
+set STELLA_LANGUAGE=en
+```
+
+Weitere Sprachen sind vorgesehen; wie sie hinzugefügt werden, steht in
+[i18n/README.md](i18n/README.md).
+
 ## Fehlersuche
 
 STELLA protokolliert jeden Lauf nach `~/.stella/logs/stella.log` — unter Windows also

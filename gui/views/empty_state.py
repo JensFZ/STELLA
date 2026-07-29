@@ -16,14 +16,16 @@ class EmptyState(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
 
-        title = QLabel("Kein Bildstapel geladen", self)
+        title = QLabel(self.tr("Kein Bildstapel geladen"), self)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
 
         description = QLabel(
-            "Wählen Sie einen Ordner mit kalibrierten FITS-Aufnahmen einer Nacht.\n"
-            "Die Aufnahmen benötigen einen DATE-OBS-Zeitstempel im Header — er ist die "
-            "Grundlage der Bewegungsrechnung.",
+            self.tr(
+                "Wählen Sie einen Ordner mit kalibrierten FITS-Aufnahmen einer Nacht.\n"
+                "Die Aufnahmen benötigen einen DATE-OBS-Zeitstempel im Header — er ist die "
+                "Grundlage der Bewegungsrechnung."
+            ),
             self,
         )
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -34,7 +36,7 @@ class EmptyState(QWidget):
         # abgeschnitten.
         description.setFixedWidth(520)
 
-        button = QPushButton("FITS-Ordner öffnen ...", self)
+        button = QPushButton(self.tr("FITS-Ordner öffnen ..."), self)
         button.setMinimumWidth(200)
         button.setDefault(True)
         button.clicked.connect(self.open_folder_requested)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
@@ -13,7 +13,14 @@ from PySide6.QtWidgets import (
 
 from core.astrometry import AstrometricSolution
 
-COLUMN_LABELS = ["Stern", "Residuum"]
+
+def column_labels() -> list[str]:
+    """Als Funktion statt als Konstante: eine Konstante würde beim Import ausgewertet,
+    also bevor die Übersetzung installiert ist."""
+    return [
+        QCoreApplication.translate("AstrometryPanel", "Stern"),
+        QCoreApplication.translate("AstrometryPanel", "Residuum"),
+    ]
 
 
 class AstrometryPanel(QWidget):
@@ -24,11 +31,11 @@ class AstrometryPanel(QWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
 
-        self.summary_label = QLabel("Keine Astrometrie berechnet.", self)
+        self.summary_label = QLabel(self.tr("Keine Astrometrie berechnet."), self)
         self.summary_label.setWordWrap(True)
 
-        self.table = QTableWidget(0, len(COLUMN_LABELS), self)
-        self.table.setHorizontalHeaderLabels(COLUMN_LABELS)
+        self.table = QTableWidget(0, len(column_labels()), self)
+        self.table.setHorizontalHeaderLabels(column_labels())
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -40,10 +47,13 @@ class AstrometryPanel(QWidget):
     def set_solution(self, solution: AstrometricSolution) -> None:
         residuals = np.asarray(solution.residuals_arcsec, dtype=float)
         self.summary_label.setText(
-            f"{solution.n_matches} Gaia-Matches — "
-            f"RMS {solution.rms_residual_arcsec:.3f}″, "
-            f"Median {np.median(residuals):.3f}″, "
-            f"Max {residuals.max():.3f}″"
+            self.tr("{matches} Gaia-Matches — RMS {rms:.3f}″, Median {median:.3f}″, "
+                    "Max {maximum:.3f}″").format(
+                matches=solution.n_matches,
+                rms=solution.rms_residual_arcsec,
+                median=np.median(residuals),
+                maximum=residuals.max(),
+            )
         )
 
         # Größte Residuen zuerst: dort stecken Fehlzuordnungen oder verzerrte Sterne.

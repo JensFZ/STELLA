@@ -36,7 +36,7 @@ class SearchSetupDialog(QDialog):
         frame_count: int = 0,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Kandidaten suchen")
+        self.setWindowTitle(self.tr("Kandidaten suchen"))
         self._project_store = project_store
         self._frame_count = frame_count
 
@@ -70,16 +70,18 @@ class SearchSetupDialog(QDialog):
         self.snr_threshold_spin.setRange(1.0, 100.0)
         self.snr_threshold_spin.setValue(5.0)
 
-        self.use_gpu_checkbox = QCheckBox("PyTorch-Batch verwenden (GPU falls verfügbar)", self)
+        self.use_gpu_checkbox = QCheckBox(
+            self.tr("PyTorch-Batch verwenden (GPU falls verfügbar)"), self
+        )
         self.use_gpu_checkbox.setChecked(True)
 
         form = QFormLayout()
-        form.addRow("Pixelmaßstab:", self.pixel_scale_spin)
-        form.addRow("Geschwindigkeit von:", self.speed_min_spin)
-        form.addRow("Geschwindigkeit bis:", self.speed_max_spin)
-        form.addRow("Geschwindigkeit-Schritt:", self.speed_step_spin)
-        form.addRow("Winkel-Schritt:", self.angle_step_spin)
-        form.addRow("SNR-Schwelle:", self.snr_threshold_spin)
+        form.addRow(self.tr("Pixelmaßstab:"), self.pixel_scale_spin)
+        form.addRow(self.tr("Geschwindigkeit von:"), self.speed_min_spin)
+        form.addRow(self.tr("Geschwindigkeit bis:"), self.speed_max_spin)
+        form.addRow(self.tr("Geschwindigkeit-Schritt:"), self.speed_step_spin)
+        form.addRow(self.tr("Winkel-Schritt:"), self.angle_step_spin)
+        form.addRow(self.tr("SNR-Schwelle:"), self.snr_threshold_spin)
         form.addRow(self.use_gpu_checkbox)
         form.addRow(QLabel(f"Erkanntes Gerät: {get_device()}", self))
 
@@ -88,8 +90,8 @@ class SearchSetupDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self
         )
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Suche starten")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Abbrechen")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(self.tr("Suche starten"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(self.tr("Abbrechen"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -137,13 +139,13 @@ class SearchSetupDialog(QDialog):
         self.preset_combo = QComboBox(self)
         self._reload_presets()
 
-        load_button = QPushButton("Laden", self)
+        load_button = QPushButton(self.tr("Laden"), self)
         load_button.clicked.connect(self._load_selected_preset)
-        save_button = QPushButton("Speichern als...", self)
+        save_button = QPushButton(self.tr("Speichern als..."), self)
         save_button.clicked.connect(self._save_as_preset)
 
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Preset:", self))
+        bar.addWidget(QLabel(self.tr("Preset:"), self))
         bar.addWidget(self.preset_combo, stretch=1)
         bar.addWidget(load_button)
         bar.addWidget(save_button)
@@ -168,13 +170,17 @@ class SearchSetupDialog(QDialog):
         self.use_gpu_checkbox.setChecked(params["use_gpu"])
 
     def _save_as_preset(self) -> None:
-        name, ok = QInputDialog.getText(self, "Preset speichern", "Name:")
+        name, ok = QInputDialog.getText(self, self.tr("Preset speichern"), self.tr("Name:"))
         if not ok or not name.strip():
             return
         self._project_store.save_preset(name.strip(), PRESET_KIND, self.parameters())
         self._reload_presets()
         self.preset_combo.setCurrentText(name.strip())
-        QMessageBox.information(self, "Preset gespeichert", f'Preset "{name.strip()}" gespeichert.')
+        QMessageBox.information(
+            self,
+            self.tr("Preset gespeichert"),
+            self.tr('Preset "{name}" gespeichert.').format(name=name.strip()),
+        )
 
     def parameters(self) -> dict:
         return {

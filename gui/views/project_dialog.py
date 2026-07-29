@@ -17,7 +17,7 @@ class OpenProjectDialog(QDialog):
 
     def __init__(self, parent: QWidget | None, project_store: ProjectStore):
         super().__init__(parent)
-        self.setWindowTitle("Projekt öffnen")
+        self.setWindowTitle(self.tr("Projekt öffnen"))
         self.resize(500, 300)
 
         self.list_widget = QListWidget(self)

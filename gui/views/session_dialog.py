@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -20,7 +20,18 @@ from core.io_fits import (
     select_frames_to_load,
 )
 
-COLUMN_LABELS = ["Beginn", "Ende", "Dauer", "Frames", "davon geladen"]
+
+def column_labels() -> list[str]:
+    """Als Funktion statt als Konstante: eine Konstante würde beim Import ausgewertet,
+    also bevor die Übersetzung installiert ist."""
+    translate = QCoreApplication.translate
+    return [
+        translate("SessionSelectDialog", "Beginn"),
+        translate("SessionSelectDialog", "Ende"),
+        translate("SessionSelectDialog", "Dauer"),
+        translate("SessionSelectDialog", "Frames"),
+        translate("SessionSelectDialog", "davon geladen"),
+    ]
 
 
 def _format_time(value: str | None, with_date: bool = True) -> str:
@@ -45,25 +56,29 @@ class SessionSelectDialog(QDialog):
         memory_budget_bytes: int = DEFAULT_MEMORY_BUDGET_BYTES,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Aufnahmeserie auswählen")
+        self.setWindowTitle(self.tr("Aufnahmeserie auswählen"))
         self.resize(700, 320)
 
         self._shape = scan.dominant_shape()
         self._sessions: list[Session] = group_into_sessions(scan.for_shape(self._shape))
 
         skipped = len(scan.infos) - len(scan.for_shape(self._shape))
-        summary = (
-            f"{len(scan.infos)} FITS-Dateien, Bildgröße {self._shape[1]}×{self._shape[0]} px, "
-            f"{len(self._sessions)} Aufnahmeserie(n)."
+        summary = self.tr(
+            "{files} FITS-Dateien, Bildgröße {width}×{height} px, {sessions} Aufnahmeserie(n)."
+        ).format(
+            files=len(scan.infos),
+            width=self._shape[1],
+            height=self._shape[0],
+            sessions=len(self._sessions),
         )
         if skipped:
-            summary += (
-                f"\n{skipped} Datei(en) mit abweichender Bildgröße werden übersprungen — "
+            summary += "\n" + self.tr(
+                "{skipped} Datei(en) mit abweichender Bildgröße werden übersprungen — "
                 "gemeinsames Stapeln setzt ein einheitliches Bildraster voraus."
-            )
+            ).format(skipped=skipped)
 
-        self.table = QTableWidget(len(self._sessions), len(COLUMN_LABELS), self)
-        self.table.setHorizontalHeaderLabels(COLUMN_LABELS)
+        self.table = QTableWidget(len(self._sessions), len(column_labels()), self)
+        self.table.setHorizontalHeaderLabels(column_labels())
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -99,10 +114,12 @@ class SessionSelectDialog(QDialog):
         self.table.selectRow(longest_index)
 
         hint = QLabel(
-            "Es kann nur eine zusammenhängende Serie verarbeitet werden: zwischen zwei "
-            "Nächten ändert sich die Ausrichtung des Teleskops, und ein bewegtes Objekt "
-            "hätte das Bildfeld längst verlassen.\n"
-            "Passen nicht alle Frames einer Serie in den Speicher, wird ihr Anfang geladen.",
+            self.tr(
+                "Es kann nur eine zusammenhängende Serie verarbeitet werden: zwischen zwei "
+                "Nächten ändert sich die Ausrichtung des Teleskops, und ein bewegtes Objekt "
+                "hätte das Bildfeld längst verlassen.\n"
+                "Passen nicht alle Frames einer Serie in den Speicher, wird ihr Anfang geladen."
+            ),
             self,
         )
         hint.setWordWrap(True)
