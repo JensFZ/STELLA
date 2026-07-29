@@ -175,3 +175,6 @@ Zuletzt gebaut und geprüft auf Windows 11 (Python 3.12, PyInstaller 6.21):
 - `STELLA.exe` startet, das Hauptfenster „STELLA“ erscheint (Smoke-Test bestanden)
 - `astroquery.gaia` samt Abhängigkeiten (`requests`, `pyvo`, `bs4`, `html5lib`, `urllib3`,
   `keyring`) im Archiv enthalten
+- Übersetzung wird geladen: mit `STELLA_LANGUAGE=en` meldet das Log
+  „Übersetzung geladen: …\_internal\i18n\stella_en.qm“. Das prüft zugleich die
+  Pfadauflösung über `sys._MEIPASS`, die nur im gebauten Zustand greift.
