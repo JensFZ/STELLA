@@ -53,7 +53,7 @@ class AstrometryPanel(QWidget):
             index_item = QTableWidgetItem(f"#{int(star_index) + 1}")
             residual_item = QTableWidgetItem(f"{residuals[star_index]:.3f}″")
             residual_item.setTextAlignment(
-                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
             self.table.setItem(row, 0, index_item)
             self.table.setItem(row, 1, residual_item)

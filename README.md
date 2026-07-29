@@ -66,9 +66,11 @@ Ein eigenständiges Programmpaket ohne Python-Installation lässt sich mit PyIns
 Die Menüpunkte werden nacheinander freigeschaltet, da jeder Schritt auf dem vorherigen
 aufbaut.
 
-1. **Datei → FITS-Ordner öffnen** (`Strg+O`) lädt einen Bildstapel. Erwartet werden bereits
-   kalibrierte Aufnahmen (Darks/Flats abgezogen) mit `DATE-OBS` im Header — die Zeitstempel
-   sind für die Bewegungsrechnung zwingend.
+1. **Datei → FITS-Ordner öffnen** (`Strg+O`) liest zunächst nur die Header. Enthält der
+   Ordner mehrere Aufnahmeserien, erscheint eine Auswahl mit Beginn, Dauer und Frame-Zahl
+   je Serie; vorausgewählt ist die längste. Erst nach der Auswahl werden die Bilddaten
+   geladen. Erwartet werden bereits kalibrierte Aufnahmen (Darks/Flats abgezogen) mit
+   `DATE-OBS` im Header — die Zeitstempel sind für die Bewegungsrechnung zwingend.
 2. **Projekt → Sterne erkennen & ausrichten** registriert alle Frames auf den ersten Frame
    und gleicht damit die Nachführdrift aus.
 3. **Projekt → Kandidaten suchen** öffnet die Suchparameter. Der Suchraum sollte zur
@@ -102,9 +104,10 @@ eine Auswahl. Was dabei aussortiert wird, steht im Log.
   Liegen mehrere Größen im Ordner (Rohframes neben registrierten oder gestackten
   Ergebnissen), wird die häufigste verwendet, der Rest übersprungen.
 - **Nur eine Aufnahmeserie.** Frames werden anhand ihrer Zeitstempel in Serien getrennt
-  (Lücke > 10 min). Verwendet wird die längste. Das ist wesentlich: Frames aus verschiedenen
-  Nächten gemeinsam zu stapeln liefert Unsinn, weil das Teleskop anders ausgerichtet war und
-  ein bewegtes Objekt das Bildfeld längst verlassen hätte.
+  (Lücke > 10 min). Bei mehreren Serien fragt STELLA nach, welche verwendet werden soll —
+  vorausgewählt ist die längste. Das ist wesentlich: Frames aus verschiedenen Nächten
+  gemeinsam zu stapeln liefert Unsinn, weil das Teleskop anders ausgerichtet war und ein
+  bewegtes Objekt das Bildfeld längst verlassen hätte.
 - **Speicherbudget (2 GB).** Ein Ordner kann tausende Frames enthalten, die zusammen nicht
   in den Arbeitsspeicher passen — 2000 Frames à 1920×1080 wären als float32 rund 36 GB.
   Geladen wird der Anfang der Serie, soweit das Budget reicht.

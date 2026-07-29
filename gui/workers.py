@@ -17,6 +17,7 @@ from core.detection import DetectionResult, detect_candidates
 from core.gpu_tracking import search_velocity_grid_torch
 from core.io_fits import (
     DEFAULT_MEMORY_BUDGET_BYTES,
+    FolderScan,
     FrameStack,
     group_into_sessions,
     load_fits_frame,
@@ -28,8 +29,76 @@ from core.synthetic_tracking import build_velocity_grid, search_velocity_grid
 logger = logging.getLogger(__name__)
 
 
+class FolderScanWorker(QThread):
+    """Liest die Header eines FITS-Ordners.
+
+    Bewusst als eigener Schritt vor dem Laden: nur so lässt sich dem Nutzer die
+    Serienauswahl anbieten, bevor Gigabytes an Bilddaten gelesen werden. Der Scan selbst
+    ist vergleichsweise schnell (rund 2000 Dateien in wenigen Sekunden), blockiert die
+    Oberfläche aber trotzdem spürbar — daher im Worker-Thread.
+    """
+
+    finished_scan = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, folder: Path, parent: QObject | None = None):
+        super().__init__(parent)
+        self._folder = Path(folder)
+
+    def run(self) -> None:
+        started = time.perf_counter()
+        logger.info("Analysiere FITS-Ordner %s", self._folder)
+        try:
+            scan = scan_folder(self._folder)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Ordneranalyse fehlgeschlagen")
+            self.failed.emit(str(exc))
+            return
+
+        logger.info(
+            "%d FITS-Dateien in %.1fs analysiert", len(scan.infos), time.perf_counter() - started
+        )
+        for shape, count in scan.shape_groups():
+            logger.info("  Bildgröße %s: %d Datei(en)", shape, count)
+        for path, error in scan.unreadable[:5]:
+            logger.warning("  nicht lesbar: %s (%s)", path.name, error)
+
+        if not scan.infos:
+            self.failed.emit(f"Keine lesbaren FITS-Dateien in {self._folder} gefunden.")
+            return
+
+        shape = scan.dominant_shape()
+        skipped_other_shape = len(scan.infos) - len(scan.for_shape(shape))
+        if skipped_other_shape:
+            # Shift-and-Stack summiert alle Frames auf ein gemeinsames Raster —
+            # abweichende Bildgrößen lassen sich nicht gemeinsam verarbeiten.
+            logger.warning(
+                "%d Datei(en) mit abweichender Bildgröße übersprungen; verwende %s",
+                skipped_other_shape,
+                shape,
+            )
+
+        sessions = group_into_sessions(scan.for_shape(shape))
+        logger.info("%d Aufnahmeserie(n) erkannt:", len(sessions))
+        for number, session in enumerate(sessions):
+            logger.info(
+                "  Serie %d: %d Frames, %s bis %s (%.0f min)",
+                number,
+                len(session),
+                session.start,
+                session.end,
+                session.duration_minutes,
+            )
+
+        self.finished_scan.emit(scan)
+
+
 class FrameStackLoader(QThread):
-    """Lädt einen FITS-Ordner in einem Worker-Thread, damit die GUI responsiv bleibt."""
+    """Lädt die Bilddaten der gewählten Aufnahmeserie in einem Worker-Thread.
+
+    Erwartet einen bereits erstellten `FolderScan`, damit der Ordner nicht zweimal
+    durchlaufen werden muss.
+    """
 
     status = Signal(str)
     progress = Signal(int, int)
@@ -38,62 +107,29 @@ class FrameStackLoader(QThread):
 
     def __init__(
         self,
-        folder: Path,
+        scan: FolderScan,
         *,
+        session_index: int | None = None,
         max_frames: int | None = None,
         memory_budget_bytes: int = DEFAULT_MEMORY_BUDGET_BYTES,
         parent: QObject | None = None,
     ):
         super().__init__(parent)
-        self._folder = Path(folder)
+        self._scan = scan
+        self._session_index = session_index
         self._max_frames = max_frames
         self._memory_budget_bytes = memory_budget_bytes
 
     def run(self) -> None:
         started = time.perf_counter()
-        logger.info("Lade FITS-Ordner %s", self._folder)
         try:
-            # Erst nur die Header lesen: das ist schnell und verhindert, dass ein Ordner
-            # mit tausenden Frames erst nach Minuten am Arbeitsspeicher scheitert.
-            self.status.emit("Analysiere Ordner ...")
-            scan = scan_folder(self._folder)
-            logger.info("%d FITS-Dateien im Ordner", len(scan.infos))
-            for shape, count in scan.shape_groups():
-                logger.info("  Bildgröße %s: %d Datei(en)", shape, count)
-            for path, error in scan.unreadable[:5]:
-                logger.warning("  nicht lesbar: %s (%s)", path.name, error)
-
-            if not scan.infos:
-                self.failed.emit(f"Keine lesbaren FITS-Dateien in {self._folder} gefunden.")
-                return
-
-            shape = scan.dominant_shape()
-            skipped_other_shape = len(scan.infos) - len(scan.for_shape(shape))
-            if skipped_other_shape:
-                # Shift-and-Stack summiert alle Frames auf ein gemeinsames Raster —
-                # abweichende Bildgrößen lassen sich nicht gemeinsam verarbeiten.
-                logger.warning(
-                    "%d Datei(en) mit abweichender Bildgröße übersprungen; verwende %s",
-                    skipped_other_shape,
-                    shape,
-                )
-
-            sessions = group_into_sessions(scan.for_shape(shape))
-            if len(sessions) > 1:
-                logger.info("%d getrennte Aufnahmeserien erkannt:", len(sessions))
-                for number, session in enumerate(sessions):
-                    logger.info(
-                        "  Serie %d: %d Frames, %s bis %s (%.0f min)",
-                        number,
-                        len(session),
-                        session.start,
-                        session.end,
-                        session.duration_minutes,
-                    )
+            shape = self._scan.dominant_shape()
+            sessions = group_into_sessions(self._scan.for_shape(shape))
 
             selected = select_frames_to_load(
-                scan,
+                self._scan,
                 shape=shape,
+                session_index=self._session_index,
                 max_frames=self._max_frames,
                 memory_budget_bytes=self._memory_budget_bytes,
             )
@@ -101,16 +137,18 @@ class FrameStackLoader(QThread):
                 self.failed.emit("Keine verwendbaren Frames im Ordner gefunden.")
                 return
 
-            chosen = max(sessions, key=len)
-            if len(sessions) > 1:
-                # Frames verschiedener Nächte gemeinsam zu stapeln liefert Unsinn, daher
-                # bewusst nur die längste Serie.
-                logger.warning(
-                    "Nur die längste Serie wird verwendet (%d Frames ab %s); Frames anderer "
-                    "Serien werden ignoriert.",
-                    len(chosen),
-                    chosen.start,
-                )
+            chosen = (
+                sessions[self._session_index]
+                if self._session_index is not None
+                else max(sessions, key=len)
+            )
+            logger.info(
+                "Gewählte Serie: %d Frames, %s bis %s (%.0f min)",
+                len(chosen),
+                chosen.start,
+                chosen.end,
+                chosen.duration_minutes,
+            )
             skipped_budget = len(chosen) - len(selected)
             if skipped_budget > 0:
                 logger.warning(

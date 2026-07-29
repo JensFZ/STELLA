@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from core.alignment import RegisteredStack
 from core.astrometry import AstrometricSolution, estimate_field_center_and_scale, pixel_to_sky
 from core.detection import DetectionResult
-from core.io_fits import FrameStack
+from core.io_fits import FolderScan, FrameStack, group_into_sessions
 from core.logging_setup import log_file_path
 from core.mpc_report import MPCObservation, write_mpc_report
 from core.project import Project, ProjectStore
@@ -27,7 +27,14 @@ from gui.views.progress_panel import ProgressPanel
 from gui.views.project_dialog import OpenProjectDialog
 from gui.views.results_table import ResultsTable
 from gui.views.search_setup import SearchSetupDialog
-from gui.workers import AlignmentWorker, AstrometryWorker, DetectionWorker, FrameStackLoader
+from gui.views.session_dialog import SessionSelectDialog
+from gui.workers import (
+    AlignmentWorker,
+    AstrometryWorker,
+    DetectionWorker,
+    FolderScanWorker,
+    FrameStackLoader,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("STELLA")
         self.resize(1200, 800)
 
+        self._scan_worker: FolderScanWorker | None = None
         self._loader: FrameStackLoader | None = None
         self._alignment_worker: AlignmentWorker | None = None
         self._detection_worker: DetectionWorker | None = None
@@ -163,7 +171,28 @@ class MainWindow(QMainWindow):
         self._load_folder(folder)
 
     def _load_folder(self, folder: str) -> None:
-        self._loader = FrameStackLoader(folder, parent=self)
+        """Ordner einlesen — zunächst nur die Header, damit die Serienauswahl möglich ist,
+        bevor Gigabytes an Bilddaten gelesen werden."""
+        self._scan_worker = FolderScanWorker(folder, parent=self)
+        self._scan_worker.finished_scan.connect(self._on_scan_finished)
+        self._scan_worker.failed.connect(self._on_load_failed)
+        self.progress_panel.start("Ordner analysieren")
+        self._scan_worker.start()
+
+    def _on_scan_finished(self, scan: FolderScan) -> None:
+        self.progress_panel.finish()
+
+        session_index = None
+        sessions = group_into_sessions(scan.for_shape(scan.dominant_shape()))
+        if len(sessions) > 1:
+            # Bei mehreren Serien entscheidet der Nutzer; vorausgewählt ist die längste.
+            dialog = SessionSelectDialog(scan, parent=self)
+            if dialog.exec() != SessionSelectDialog.DialogCode.Accepted:
+                self.statusBar().showMessage("Laden abgebrochen.", 5000)
+                return
+            session_index = dialog.selected_session_index()
+
+        self._loader = FrameStackLoader(scan, session_index=session_index, parent=self)
         self._loader.status.connect(self.progress_panel.set_label)
         self._loader.progress.connect(self.progress_panel.set_progress)
         self._loader.finished_loading.connect(self._on_load_finished)
