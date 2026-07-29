@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtCore import QModelIndex, QSize, Qt
+from PySide6.QtCore import QModelIndex, QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -82,6 +82,9 @@ class ResultsTable(QWidget):
     Bestätigung/Verwerfung durch den Nutzer (false positives sind bei Synthetic Tracking
     normal)."""
 
+    #: Wird ausgelöst, wenn sich eine Bewertung ändert — der Export hängt davon ab.
+    confirmation_changed = Signal()
+
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._detections: list[DetectionResult] = []
@@ -161,6 +164,7 @@ class ResultsTable(QWidget):
         if detection is None:
             return
         detection.confirmed = STATUS_TO_CONFIRMED[STATUS_OPTIONS.index(item.text())]
+        self.confirmation_changed.emit()
 
     def detections(self) -> list[DetectionResult]:
         return list(self._detections)

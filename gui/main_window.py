@@ -7,9 +7,12 @@ from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
+    QHBoxLayout,
     QInputDialog,
     QMainWindow,
     QMessageBox,
+    QStackedWidget,
+    QWidget,
 )
 
 from core.alignment import RegisteredStack
@@ -22,12 +25,14 @@ from core.project import Project, ProjectStore
 from core.synthetic_tracking import candidate_positions_per_frame
 from gui.views.astrometry_panel import AstrometryPanel
 from gui.views.astrometry_setup import AstrometrySetupDialog
+from gui.views.empty_state import EmptyState
 from gui.views.image_viewer import ImageViewer
 from gui.views.progress_panel import ProgressPanel
 from gui.views.project_dialog import OpenProjectDialog
 from gui.views.results_table import ResultsTable
 from gui.views.search_setup import SearchSetupDialog
 from gui.views.session_dialog import SessionSelectDialog
+from gui.views.workflow_panel import StepState, WorkflowPanel
 from gui.workers import (
     AlignmentWorker,
     AstrometryWorker,
@@ -57,14 +62,32 @@ class MainWindow(QMainWindow):
         self._project_store: ProjectStore | None = None
         self._current_project: Project | None = None
         self._restore_project_on_load: Project | None = None
+        # Zentralbereich: solange nichts geladen ist, der Einstiegsbildschirm statt einer
+        # leeren schwarzen Fläche.
         self.image_viewer = ImageViewer(self)
-        self.setCentralWidget(self.image_viewer)
+        self.empty_state = EmptyState(self)
+        self.empty_state.open_folder_requested.connect(self._open_fits_folder)
+        self.central_stack = QStackedWidget(self)
+        self.central_stack.addWidget(self.empty_state)
+        self.central_stack.addWidget(self.image_viewer)
+
+        self.workflow_panel = WorkflowPanel(self)
+        self.workflow_panel.step_activated.connect(self._on_workflow_step)
+
+        central = QWidget(self)
+        central_layout = QHBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self.workflow_panel)
+        central_layout.addWidget(self.central_stack, stretch=1)
+        self.setCentralWidget(central)
 
         self.progress_panel = ProgressPanel(self)
         self.progress_panel.cancel_requested.connect(self._cancel_detection)
         self.statusBar().addPermanentWidget(self.progress_panel, 1)
 
         self.results_table = ResultsTable(self)
+        self.results_table.confirmation_changed.connect(self._update_export_step)
         self.results_dock = QDockWidget("Kandidaten", self)
         self.results_dock.setWidget(self.results_table)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.results_dock)
@@ -164,6 +187,40 @@ class MainWindow(QMainWindow):
             "Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion.",
         )
 
+    def _update_export_step(self) -> None:
+        """Der Export braucht beides: eine WCS-Lösung und mindestens einen bestätigten
+        Kandidaten. Solange eines fehlt, zeigt die Schrittleiste, was noch aussteht."""
+        confirmed = sum(1 for d in self.results_table.detections() if d.confirmed is True)
+        has_solution = self._astrometric_solution is not None
+
+        if has_solution and confirmed:
+            self.workflow_panel.set_state(
+                WorkflowPanel.STEP_EXPORT,
+                StepState.AVAILABLE,
+                f"{confirmed} bestätigt",
+            )
+            return
+
+        missing = []
+        if not has_solution:
+            missing.append("Astrometrie")
+        if not confirmed:
+            missing.append("bestätigte Kandidaten")
+        self.workflow_panel.set_state(
+            WorkflowPanel.STEP_EXPORT, StepState.LOCKED, "fehlt: " + " und ".join(missing)
+        )
+
+    def _on_workflow_step(self, step: int) -> None:
+        """Schrittleiste und Menü lösen dieselben Aktionen aus."""
+        handlers = {
+            WorkflowPanel.STEP_LOAD: self._open_fits_folder,
+            WorkflowPanel.STEP_ALIGN: self._run_alignment,
+            WorkflowPanel.STEP_DETECT: self._open_search_setup,
+            WorkflowPanel.STEP_ASTROMETRY: self._open_astrometry_setup,
+            WorkflowPanel.STEP_EXPORT: self._export_mpc_report,
+        }
+        handlers[step]()
+
     def _open_fits_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "FITS-Ordner öffnen")
         if not folder:
@@ -204,8 +261,25 @@ class MainWindow(QMainWindow):
         self.progress_panel.finish()
         self._stack = stack
         self.image_viewer.set_stack(stack)
+        self.central_stack.setCurrentWidget(self.image_viewer)
         self.align_action.setEnabled(len(stack) > 1)
         self.statusBar().showMessage(f"{len(stack)} Frames geladen.", 5000)
+
+        # Ein neuer Stapel entwertet alle späteren Ergebnisse.
+        self._registered = None
+        self._astrometric_solution = None
+        self.detect_action.setEnabled(False)
+        self.astrometry_action.setEnabled(False)
+        self.export_mpc_action.setEnabled(False)
+        self.workflow_panel.reset_from(WorkflowPanel.STEP_ALIGN)
+
+        start = (stack[0].obs_time or "")[11:16]
+        detail = f"{len(stack)} Frames"
+        if start:
+            detail += f" ab {start} Uhr"
+        self.workflow_panel.set_state(WorkflowPanel.STEP_LOAD, StepState.DONE, detail)
+        if len(stack) > 1:
+            self.workflow_panel.set_state(WorkflowPanel.STEP_ALIGN, StepState.AVAILABLE)
 
         if self._restore_project_on_load is not None:
             project = self._restore_project_on_load
@@ -244,6 +318,18 @@ class MainWindow(QMainWindow):
         self.detect_action.setEnabled(True)
         self.astrometry_action.setEnabled(True)
         self.statusBar().showMessage("Ausrichtung abgeschlossen.", 5000)
+
+        stars = len(registered[registered.reference_index].stars)
+        max_shift = max(
+            max(abs(f.alignment.dx), abs(f.alignment.dy)) for f in registered.frames
+        )
+        self.workflow_panel.set_state(
+            WorkflowPanel.STEP_ALIGN,
+            StepState.DONE,
+            f"{stars} Sterne, max. Drift {max_shift:.1f} px",
+        )
+        self.workflow_panel.set_state(WorkflowPanel.STEP_DETECT, StepState.AVAILABLE)
+        self.workflow_panel.set_state(WorkflowPanel.STEP_ASTROMETRY, StepState.AVAILABLE)
 
     def _on_align_failed(self, message: str) -> None:
         self.progress_panel.finish()
@@ -286,10 +372,17 @@ class MainWindow(QMainWindow):
         self.detect_action.setEnabled(True)
         if not detections:
             self.statusBar().showMessage("Keine Kandidaten gefunden.", 5000)
+            self.workflow_panel.set_state(
+                WorkflowPanel.STEP_DETECT, StepState.AVAILABLE, "keine Kandidaten"
+            )
             return
         self.results_table.set_detections(detections)
         self.results_dock.show()
         self.statusBar().showMessage(f"{len(detections)} Kandidat(en) gefunden.", 5000)
+        self.workflow_panel.set_state(
+            WorkflowPanel.STEP_DETECT, StepState.DONE, f"{len(detections)} Kandidaten"
+        )
+        self._update_export_step()
 
     def _on_detect_failed(self, message: str) -> None:
         self.progress_panel.finish()
@@ -326,6 +419,12 @@ class MainWindow(QMainWindow):
         self.export_mpc_action.setEnabled(True)
         self.astrometry_panel.set_solution(solution)
         self.astrometry_dock.show()
+        self.workflow_panel.set_state(
+            WorkflowPanel.STEP_ASTROMETRY,
+            StepState.DONE,
+            f"{solution.n_matches} Gaia-Matches, RMS {solution.rms_residual_arcsec:.3f}″",
+        )
+        self._update_export_step()
         self.statusBar().showMessage(
             f"Astrometrie: {solution.n_matches} Gaia-Matches, "
             f"RMS-Residuum {solution.rms_residual_arcsec:.3f}\"",
