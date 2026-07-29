@@ -303,8 +303,10 @@ class MainWindow(QMainWindow):
     def _on_load_finished(self, stack: FrameStack) -> None:
         self.progress_panel.finish()
         self._stack = stack
-        self.image_viewer.set_stack(stack)
+        # Erst umschalten, dann befüllen: als verdeckte Seite des Stapels hat der Viewer
+        # noch keine sinnvolle Größe, und das Einpassen des Bildes würde danebengreifen.
         self.central_stack.setCurrentWidget(self.image_viewer)
+        self.image_viewer.set_stack(stack)
         self.align_action.setEnabled(len(stack) > 1)
         self.statusBar().showMessage(f"{len(stack)} Frames geladen.", 5000)
 

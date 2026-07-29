@@ -64,3 +64,65 @@ def test_image_viewer_shows_star_overlay_after_registration(tmp_path):
     assert viewer.star_overlay_button.isChecked()
     assert len(viewer._star_items) == len(positions)
     assert "Sterne gematcht" in viewer.frame_label.text()
+
+
+def test_image_is_fitted_into_the_view(tmp_path):
+    """Regressionsschutz: das Bild muss die Ansicht ausfuellen.
+
+    Zuvor wurde nur beim allerersten Bild eingepasst — und das auch noch, waehrend der
+    Viewer als verdeckte Seite eines QStackedWidget noch keine sinnvolle Groesse hatte.
+    Das Ergebnis war ein winziger Fleck in der Bildmitte.
+    """
+    from gui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    _write_star_field_fits(tmp_path / "a.fits", [(30.0, 40.0)], size=200)
+    stack = load_frame_stack(tmp_path)
+
+    # Bewusst ueber das echte Hauptfenster: dort liegt der Viewer als verdeckte Seite eines
+    # QStackedWidget und hat vor dem ersten Anzeigen nur eine winzige Ersatzgroesse
+    # (gemessen 98x28 px). Genau in diesem Zustand wurde frueher eingepasst — und danach
+    # nie wieder, sodass das Bild dauerhaft als Fleck in der Mitte stehenblieb.
+    window = MainWindow()
+    window.resize(1280, 800)
+    window.show()
+    app.processEvents()
+
+    window._on_load_finished(stack)
+    app.processEvents()  # das Einpassen laeuft verzoegert nach dem Layout
+
+    view = window.image_viewer.view
+    # Seitenverhaeltnistreues Einpassen fuellt genau eine Richtung vollstaendig aus; in der
+    # anderen bleibt je nach Bildformat Rand. Geprueft wird die staerker gefuellte Richtung.
+    shown = view.transform().mapRect(view.scene().itemsBoundingRect())
+    viewport = view.viewport().rect()
+    fill = max(shown.width() / viewport.width(), shown.height() / viewport.height())
+    window.close()
+
+    assert fill > 0.9, (
+        f"Bild fuellt die Ansicht nur zu {fill:.0%} aus "
+        f"({shown.width():.0f}x{shown.height():.0f} px in "
+        f"{viewport.width()}x{viewport.height()} px)"
+    )
+
+
+def test_zooming_disables_auto_fit_and_button_restores_it(tmp_path):
+    """Nach eigenem Zoom darf die Ansicht nicht ungefragt zurueckspringen — der
+    Einpassen-Knopf muss aber zurueckfuehren."""
+    _app = QApplication.instance() or QApplication([])  # noqa: F841
+    _write_star_field_fits(tmp_path / "a.fits", [(30.0, 40.0)], size=200)
+    viewer = ImageViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.set_stack(load_frame_stack(tmp_path))
+    viewer.view.fit_to_content()
+
+    viewer.view.scale(4.0, 4.0)
+    viewer.view._auto_fit = False
+    zoomed = viewer.view.transform().m11()
+
+    viewer.resize(900, 700)
+    assert viewer.view.transform().m11() == zoomed, "Zoom des Nutzers darf nicht verworfen werden"
+
+    viewer.view.reset_fit()
+    assert viewer.view.transform().m11() != zoomed

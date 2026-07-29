@@ -37,15 +37,53 @@ def _to_qimage(gray: np.ndarray) -> QImage:
 
 
 class ZoomableGraphicsView(QGraphicsView):
+    """Bildansicht mit Mausrad-Zoom, die das Bild von sich aus einpasst.
+
+    Das Einpassen darf nicht nur einmal beim ersten Bild geschehen: zu diesem Zeitpunkt
+    kann das Ansichtsfenster noch seine endgültige Größe suchen (etwa weil das Widget als
+    verdeckte Seite eines QStackedWidget liegt), und das Fenster lässt sich später
+    vergrößern. Deshalb wird bei jeder Größenänderung neu eingepasst — solange der Nutzer
+    nicht selbst gezoomt hat; dann behält seine Einstellung Vorrang.
+    """
+
     def __init__(self, scene: QGraphicsScene, parent: QWidget | None = None):
         super().__init__(scene, parent)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._auto_fit = True
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         factor = 1.25 if event.angleDelta().y() > 0 else 0.8
         self.scale(factor, factor)
+        self._auto_fit = False  # ab jetzt bestimmt der Nutzer den Maßstab
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt-Namenskonvention)
+        super().resizeEvent(event)
+        if self._auto_fit:
+            self.fit_to_content()
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt-Namenskonvention)
+        # Beim Einblenden steht die endgültige Größe erst fest, nachdem das Layout
+        # durchgelaufen ist — daher verzögert einpassen.
+        super().showEvent(event)
+        if self._auto_fit:
+            # Mit Kontextobjekt: wird die Ansicht vor dem Auslösen zerstört, verwirft Qt
+            # den Aufruf. Ohne das liefe er auf ein bereits gelöschtes Objekt und stürzte ab
+            # — etwa wenn direkt nach dem Laden geschlossen wird.
+            QTimer.singleShot(0, self, self.fit_to_content)
+
+    def fit_to_content(self) -> None:
+        """Passt den sichtbaren Inhalt vollständig ins Ansichtsfenster ein."""
+        bounds = self.scene().itemsBoundingRect()
+        if bounds.isEmpty():
+            return
+        self.fitInView(bounds, Qt.AspectRatioMode.KeepAspectRatio)
+
+    def reset_fit(self) -> None:
+        """Schaltet das automatische Einpassen wieder ein und passt sofort ein."""
+        self._auto_fit = True
+        self.fit_to_content()
 
 
 class ImageViewer(QWidget):
@@ -105,11 +143,16 @@ class ImageViewer(QWidget):
         self.star_overlay_button.setEnabled(False)
         self.star_overlay_button.toggled.connect(self._update_display)
 
+        # Ohne diesen Knopf gäbe es nach dem Zoomen keinen Weg zurück zur Gesamtansicht.
+        self.fit_button = QPushButton(self.tr("Einpassen"), self)
+        self.fit_button.clicked.connect(self.view.reset_fit)
+
         controls = QHBoxLayout()
         controls.addWidget(self.low_pct_spin)
         controls.addWidget(self.high_pct_spin)
         controls.addWidget(self.blink_button)
         controls.addWidget(self.star_overlay_button)
+        controls.addWidget(self.fit_button)
         controls.addStretch(1)
 
         nav = QHBoxLayout()
@@ -162,6 +205,11 @@ class ImageViewer(QWidget):
         if has_frames:
             self.thumbnail_list.setCurrentRow(0)
             self._update_display()
+            # Ein neuer Stapel kann eine andere Bildgröße haben; zudem ist das Widget beim
+            # Laden womöglich noch nicht sichtbar. Verzögert einpassen, damit das Layout
+            # zuvor die endgültige Größe festlegt.
+            self.view.reset_fit()
+            QTimer.singleShot(0, self.view, self.view.reset_fit)
         else:
             self.frame_label.setText(self.tr("Keine Frames gefunden"))
 
@@ -198,7 +246,6 @@ class ImageViewer(QWidget):
 
         if self._pixmap_item is None:
             self._pixmap_item = self.scene.addPixmap(pixmap)
-            self.view.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
         else:
             self._pixmap_item.setPixmap(pixmap)
         self.scene.setSceneRect(self._pixmap_item.boundingRect())
