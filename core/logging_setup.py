@@ -67,7 +67,28 @@ def configure_logging(level: int | str | None = None, log_dir: Path | None = Non
         stream_handler.setFormatter(formatter)
         root.addHandler(stream_handler)
 
+    _quiet_noisy_libraries()
     return path
+
+
+def _quiet_noisy_libraries() -> None:
+    """Dämpft Bibliotheks-Meldungen, die pro Datei anfallen und nichts aussagen.
+
+    `FITSFixedWarning: 'datfix' made the change 'Set MJD-OBS ... from DATE-OBS'` erscheint
+    bei praktisch jeder Aufnahme mit DATE-OBS-Header: astropy ergänzt dabei nur ein
+    abgeleitetes Feld. Bei tausenden Frames überdeckt das jede echte Meldung. Fehler von
+    astropy bleiben sichtbar.
+    """
+    import warnings
+
+    try:
+        from astropy.wcs import FITSFixedWarning
+
+        warnings.filterwarnings("ignore", category=FITSFixedWarning)
+    except Exception:  # noqa: BLE001
+        pass
+
+    logging.getLogger("astropy").setLevel(logging.ERROR)
 
 
 def log_environment() -> None:

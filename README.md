@@ -90,6 +90,42 @@ Kandidatenbewertung speichern und später fortsetzen.
 > Objektbezeichnung und den Stationscode (`XXX`). Beide müssen durch die offiziell
 > zugewiesenen Werte ersetzt werden — siehe [core/mpc_report.py](core/mpc_report.py).
 
+## Umgang mit echten Aufnahmeordnern
+
+Aufnahmeordner enthalten in der Praxis selten genau das, was sich stapeln lässt. STELLA
+liest deshalb zuerst nur die Header (bei 2000 Dateien wenige Sekunden) und trifft daraus
+eine Auswahl. Was dabei aussortiert wird, steht im Log.
+
+- **Farbaufnahmen werden zu Mono gemittelt.** Entbayerte Frames liegen als drei Ebenen vor;
+  für die Detektion ist die Farbe ohne Nutzen, das Mitteln verbessert sogar das Rauschen.
+- **Nur eine Bildgröße.** Shift-and-Stack summiert alle Frames auf ein gemeinsames Raster.
+  Liegen mehrere Größen im Ordner (Rohframes neben registrierten oder gestackten
+  Ergebnissen), wird die häufigste verwendet, der Rest übersprungen.
+- **Nur eine Aufnahmeserie.** Frames werden anhand ihrer Zeitstempel in Serien getrennt
+  (Lücke > 10 min). Verwendet wird die längste. Das ist wesentlich: Frames aus verschiedenen
+  Nächten gemeinsam zu stapeln liefert Unsinn, weil das Teleskop anders ausgerichtet war und
+  ein bewegtes Objekt das Bildfeld längst verlassen hätte.
+- **Speicherbudget (2 GB).** Ein Ordner kann tausende Frames enthalten, die zusammen nicht
+  in den Arbeitsspeicher passen — 2000 Frames à 1920×1080 wären als float32 rund 36 GB.
+  Geladen wird der Anfang der Serie, soweit das Budget reicht.
+
+Für Synthetic Tracking ist das auch fachlich richtig: gebraucht wird ein zeitlich
+zusammenhängender Ausschnitt einer Nacht, keine Sammlung über Monate.
+
+Ein Beispiel aus dem Log:
+
+```
+2115 FITS-Dateien im Ordner
+  Bildgröße (1920, 1080): 1594 Datei(en)
+  Bildgröße (2048, 1271): 519 Datei(en)
+521 Datei(en) mit abweichender Bildgröße übersprungen; verwende (1920, 1080)
+4 getrennte Aufnahmeserien erkannt:
+  Serie 1: 1164 Frames, 2025-02-16T23:01 bis 2025-02-17T01:29 (148 min)
+Nur die längste Serie wird verwendet (1164 Frames ab 2025-02-16T23:01)
+906 weitere Frame(s) dieser Serie wegen des Speicherbudgets (2.0 GB) nicht geladen
+Lade 258 Frames der Größe (1920, 1080) (~2.0 GB)
+```
+
 ## Fehlersuche
 
 STELLA protokolliert jeden Lauf nach `~/.stella/logs/stella.log` — unter Windows also

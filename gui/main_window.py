@@ -163,7 +163,8 @@ class MainWindow(QMainWindow):
         self._load_folder(folder)
 
     def _load_folder(self, folder: str) -> None:
-        self._loader = FrameStackLoader(folder, self)
+        self._loader = FrameStackLoader(folder, parent=self)
+        self._loader.status.connect(self.progress_panel.set_label)
         self._loader.progress.connect(self.progress_panel.set_progress)
         self._loader.finished_loading.connect(self._on_load_finished)
         self._loader.failed.connect(self._on_load_failed)
