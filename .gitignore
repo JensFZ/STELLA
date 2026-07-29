@@ -1,13 +1,37 @@
+# Python
 __pycache__/
 *.pyc
-.venv/
 *.egg-info/
+
+# Virtuelle Umgebungen (BUILD.md nutzt .venv, die anderen sind gängige Varianten)
+.venv/
+venv/
+env/
+
+# Build-Artefakte. stella.spec ist bewusst NICHT ignoriert — die Datei ist
+# Teil des Projekts und beschreibt, wie das Bundle gebaut wird.
 build/
 dist/
-# PyInstaller-Artefakte (die .spec-Datei ist dagegen versioniert)
 *.manifest
+
+# Werkzeug-Caches
 .pytest_cache/
 .ruff_cache/
+
+# Astro-Rohdaten: Aufnahmestapel sind schnell mehrere GB groß und gehören nicht
+# in die Git-Historie (einmal committed, bekommt man sie kaum wieder heraus).
+# Die Tests erzeugen ihre FITS-Fixtures selbst zur Laufzeit. Soll doch einmal
+# eine kleine Beispieldatei mit ins Repo: `git add -f <datei>`.
+*.fits
+*.fit
+*.fts
+
+# SQLite-Projektdatenbanken (Standardort ist ~/.stella/projects.db, dies fängt
+# Datenbanken ab, die versehentlich im Repo landen)
 *.db
+
+# Editoren und Betriebssysteme
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
