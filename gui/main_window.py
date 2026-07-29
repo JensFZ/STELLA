@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self._registered: RegisteredStack | None = None
         self._astrometric_solution: AstrometricSolution | None = None
         self._search_pixel_scale_arcsec: float | None = None
+        self._header_pixel_scale_arcsec: float | None = None
         self._project_store: ProjectStore | None = None
         self._current_project: Project | None = None
         self._restore_project_on_load: Project | None = None
@@ -325,10 +326,17 @@ class MainWindow(QMainWindow):
             return
         self._load_folder(folder)
 
+    def _debayer_setting(self) -> bool:
+        """Zuletzt gewählte Einstellung für die Bayer-Mittelung; standardmäßig aktiv."""
+        value = settings().value("load/debayer", True)
+        return value if isinstance(value, bool) else str(value).lower() in ("true", "1")
+
     def _load_folder(self, folder: str) -> None:
         """Ordner einlesen — zunächst nur die Header, damit die Serienauswahl möglich ist,
         bevor Gigabytes an Bilddaten gelesen werden."""
-        self._scan_worker = FolderScanWorker(folder, parent=self)
+        self._scan_worker = FolderScanWorker(
+            folder, debayer=self._debayer_setting(), parent=self
+        )
         self._scan_worker.finished_scan.connect(self._on_scan_finished)
         self._scan_worker.failed.connect(self._on_load_failed)
         self.progress_panel.start(self.tr("Ordner analysieren"))
@@ -338,16 +346,35 @@ class MainWindow(QMainWindow):
         self.progress_panel.finish()
 
         session_index = None
+        debayer = self._debayer_setting()
         sessions = group_into_sessions(scan.for_shape(scan.dominant_shape()))
-        if len(sessions) > 1:
-            # Bei mehreren Serien entscheidet der Nutzer; vorausgewählt ist die längste.
-            dialog = SessionSelectDialog(scan, parent=self)
+
+        # Der Dialog erscheint auch bei nur einer Serie, sobald Bayer-Daten vorliegen: die
+        # Mittelung verändert Auflösung und Pixelmaßstab, das soll niemand unbemerkt
+        # geschehen.
+        if len(sessions) > 1 or scan.bayer_patterns():
+            dialog = SessionSelectDialog(scan, parent=self, debayer=debayer)
             if dialog.exec() != SessionSelectDialog.DialogCode.Accepted:
                 self.statusBar().showMessage(self.tr("Laden abgebrochen."), 5000)
                 return
             session_index = dialog.selected_session_index()
+            chosen_debayer = dialog.debayer_enabled()
 
-        self._loader = FrameStackLoader(scan, session_index=session_index, parent=self)
+            if chosen_debayer != debayer:
+                # Die Bildgrößen im Scan hängen von dieser Entscheidung ab — bei einer
+                # Änderung muss der Ordner erneut analysiert werden.
+                settings().setValue("load/debayer", chosen_debayer)
+                logger.info("Bayer-Mittelung umgestellt auf %s — analysiere erneut", chosen_debayer)
+                self._load_folder(str(scan.folder))
+                return
+
+        # Rohaufnahmen enthalten oft kein WCS; der aus Pixelgröße und Brennweite berechnete
+        # Maßstab ist dann die einzige belastbare Vorgabe für Suche und Astrometrie.
+        self._header_pixel_scale_arcsec = scan.pixel_scale_arcsec()
+
+        self._loader = FrameStackLoader(
+            scan, session_index=session_index, debayer=debayer, parent=self
+        )
         self._loader.status.connect(self.progress_panel.set_label)
         self._loader.progress.connect(self.progress_panel.set_progress)
         self._loader.finished_loading.connect(self._on_load_finished)
@@ -441,7 +468,10 @@ class MainWindow(QMainWindow):
         if self._stack is None or self._registered is None:
             return
         dialog = SearchSetupDialog(
-            self, project_store=self._get_project_store(), frame_count=len(self._stack)
+            self,
+            project_store=self._get_project_store(),
+            frame_count=len(self._stack),
+            pixel_scale_arcsec=self._header_pixel_scale_arcsec,
         )
         if dialog.exec() != SearchSetupDialog.DialogCode.Accepted:
             return

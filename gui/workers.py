@@ -41,15 +41,16 @@ class FolderScanWorker(QThread):
     finished_scan = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, folder: Path, parent: QObject | None = None):
+    def __init__(self, folder: Path, *, debayer: bool = True, parent: QObject | None = None):
         super().__init__(parent)
         self._folder = Path(folder)
+        self._debayer = debayer
 
     def run(self) -> None:
         started = time.perf_counter()
         logger.info("Analysiere FITS-Ordner %s", self._folder)
         try:
-            scan = scan_folder(self._folder)
+            scan = scan_folder(self._folder, debayer=self._debayer)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Ordneranalyse fehlgeschlagen")
             self.failed.emit(str(exc))
@@ -62,6 +63,23 @@ class FolderScanWorker(QThread):
             logger.info("  Bildgröße %s: %d Datei(en)", shape, count)
         for path, error in scan.unreadable[:5]:
             logger.warning("  nicht lesbar: %s (%s)", path.name, error)
+
+        patterns = scan.bayer_patterns()
+        if patterns:
+            logger.info(
+                "Bayer-Muster erkannt: %s — 2×2-Mittelung %s",
+                ", ".join(sorted(patterns)),
+                "aktiv" if self._debayer else "abgeschaltet",
+            )
+            if not self._debayer:
+                # Ohne Mittelung bleibt das Mosaik in den Daten und hebt die Nachweisgrenze.
+                logger.warning(
+                    "Ohne Bayer-Mittelung verbleibt das Sensormosaik in den Daten; es erhöht "
+                    "das gemessene Hintergrundrauschen und damit die SNR-Schwelle."
+                )
+        scale = scan.pixel_scale_arcsec()
+        if scale:
+            logger.info("Pixelmaßstab laut Header: %.3f arcsec/px", scale)
 
         if not scan.infos:
             self.failed.emit(f"Keine lesbaren FITS-Dateien in {self._folder} gefunden.")
@@ -112,6 +130,7 @@ class FrameStackLoader(QThread):
         session_index: int | None = None,
         max_frames: int | None = None,
         memory_budget_bytes: int = DEFAULT_MEMORY_BUDGET_BYTES,
+        debayer: bool = True,
         parent: QObject | None = None,
     ):
         super().__init__(parent)
@@ -119,6 +138,7 @@ class FrameStackLoader(QThread):
         self._session_index = session_index
         self._max_frames = max_frames
         self._memory_budget_bytes = memory_budget_bytes
+        self._debayer = debayer
 
     def run(self) -> None:
         started = time.perf_counter()
@@ -169,7 +189,7 @@ class FrameStackLoader(QThread):
 
             frames = []
             for index, info in enumerate(selected, start=1):
-                frames.append(load_fits_frame(info.path))
+                frames.append(load_fits_frame(info.path, debayer=self._debayer))
                 logger.debug("Frame %d/%d: %s", index, total, info.path.name)
                 self.progress.emit(index, total)
         except Exception as exc:  # noqa: BLE001

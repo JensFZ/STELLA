@@ -34,6 +34,9 @@ class FitsFrame:
     header: fits.Header
     wcs: WCS | None
     obs_time: str | None
+    #: True, wenn das Bayer-Mosaik durch 2×2-Mittelung entfernt wurde. Dann ist die
+    #: Auflösung halbiert und der Pixelmaßstab verdoppelt.
+    bayer_binned: bool = False
 
 
 @dataclass
@@ -52,9 +55,13 @@ class FitsInfo:
     """Kopfdaten einer FITS-Datei, ohne die Bilddaten zu lesen."""
 
     path: Path
-    shape: tuple[int, int]  # (Zeilen, Spalten) nach einer eventuellen Mono-Wandlung
+    shape: tuple[int, int]  # (Zeilen, Spalten) nach Mono-Wandlung und ggf. Bayer-Mittelung
     n_planes: int  # 1 = einkanalig, >1 = Farb-/Mehrebenenbild
     obs_time: str | None
+    #: Bayer-Muster laut Header, z.B. "GRBG" — None bei bereits entbayerten Aufnahmen.
+    bayer: str | None = None
+    #: Geschätzter Pixelmaßstab in arcsec/px, passend zur oben angegebenen Form.
+    pixel_scale_arcsec: float | None = None
 
     @property
     def bytes_as_float32(self) -> int:
@@ -142,10 +149,55 @@ class FolderScan:
     def for_shape(self, shape: tuple[int, int]) -> list[FitsInfo]:
         return [info for info in self.infos if info.shape == shape]
 
+    def bayer_patterns(self) -> set[str]:
+        """Im Ordner vorkommende Bayer-Muster. Leer, wenn alle Aufnahmen entbayert sind."""
+        return {info.bayer for info in self.infos if info.bayer}
+
+    def pixel_scale_arcsec(self) -> float | None:
+        """Pixelmaßstab der häufigsten Bildgröße, sofern aus den Headern ableitbar."""
+        shape = self.dominant_shape()
+        if shape is None:
+            return None
+        for info in self.for_shape(shape):
+            if info.pixel_scale_arcsec:
+                return info.pixel_scale_arcsec
+        return None
+
 
 def find_fits_files(folder: Path) -> list[Path]:
     folder = Path(folder)
     return sorted(p for p in folder.iterdir() if p.suffix.lower() in FITS_EXTENSIONS)
+
+
+def bayer_pattern(header: fits.Header) -> str | None:
+    """Bayer-Muster aus dem Header, falls die Aufnahme unentbayert vorliegt."""
+    value = header.get("BAYERPAT")
+    return str(value).strip() if value else None
+
+
+def bin_bayer_2x2(data: np.ndarray) -> np.ndarray:
+    """Mittelt je 2×2-Block zu einem Pixel und entfernt damit das Bayer-Mosaik.
+
+    Rohaufnahmen von Farbsensoren enthalten das Sensormosaik: benachbarte Pixel messen
+    verschiedene Farben und damit systematisch verschiedene Helligkeiten. Gemessen an
+    Seestar-S50-Aufnahmen unterscheiden sich die vier Positionen eines Blocks um rund 19 %
+    — als Schachbrettmuster sichtbar.
+
+    Für die Detektion ist das schädlich: das Muster geht in die Hintergrundstatistik ein und
+    hebt deren Streuung (gemessen um Faktor 1,46). Da STELLA die SNR-Schwelle daran bemisst,
+    fallen lichtschwache Objekte unter die Schwelle — genau die gesuchten. Zusätzlich
+    verwechselt die Sternerkennung das Mosaik mit Struktur, und Shift-and-Stack vermischt
+    bei Subpixel-Verschiebungen die Farbkanäle.
+
+    Die Mittelung über den Block ist das übliche Vorgehen für Farbsensordaten in Astrometrie
+    und Photometrie. Preis: die Auflösung halbiert sich, der Pixelmaßstab verdoppelt sich.
+    """
+    height, width = data.shape[-2:]
+    # Ungerade Randzeile/-spalte abschneiden, sonst passt das 2×2-Raster nicht auf.
+    trimmed = data[: height - height % 2, : width - width % 2]
+    return (
+        trimmed[0::2, 0::2] + trimmed[0::2, 1::2] + trimmed[1::2, 0::2] + trimmed[1::2, 1::2]
+    ) / 4.0
 
 
 def to_mono(data: np.ndarray) -> np.ndarray:
@@ -165,6 +217,23 @@ def to_mono(data: np.ndarray) -> np.ndarray:
     raise ValueError(f"Nicht unterstützte Bilddimension: {data.shape}")
 
 
+def pixel_scale_from_header(header: fits.Header, binned: bool = False) -> float | None:
+    """Schätzt den Pixelmaßstab in arcsec/px aus Pixelgröße und Brennweite.
+
+    Rohaufnahmen enthalten oft kein WCS (die Frames des Seestar S50 etwa nicht), wohl aber
+    XPIXSZ und FOCALLEN. Daraus ergibt sich der Maßstab über die Kleinwinkelnäherung —
+    sonst müsste der Wert geraten werden, und er bestimmt maßgeblich, welche
+    Objektgeschwindigkeiten die Suche überhaupt trifft.
+    """
+    pixel_size_um = header.get("XPIXSZ")
+    focal_length_mm = header.get("FOCALLEN")
+    if not pixel_size_um or not focal_length_mm:
+        return None
+    # 206265 arcsec entsprechen einem Radiant; Pixelgröße in mm / Brennweite in mm.
+    scale = 206265.0 * (float(pixel_size_um) / 1000.0) / float(focal_length_mm)
+    return scale * 2.0 if binned else scale
+
+
 def _shape_after_mono(header: fits.Header) -> tuple[tuple[int, int], int]:
     """(Zeilen, Spalten) und Ebenenzahl aus dem Header, ohne die Daten zu lesen."""
     naxis = int(header.get("NAXIS", 0))
@@ -178,11 +247,14 @@ def _shape_after_mono(header: fits.Header) -> tuple[tuple[int, int], int]:
     raise ValueError(f"Nicht unterstützte Achsenzahl: NAXIS={naxis}")
 
 
-def scan_folder(folder: Path) -> FolderScan:
+def scan_folder(folder: Path, debayer: bool = True) -> FolderScan:
     """Liest nur die Header aller FITS-Dateien im Ordner.
 
     Das ist um Größenordnungen schneller als die Bilddaten zu laden und beantwortet die
     entscheidenden Fragen vorab: wie viele Frames, welche Bildgrößen, wie viel Speicher.
+
+    `debayer` muss hier bereits bekannt sein, weil die 2×2-Mittelung die Bildgröße halbiert
+    — und die Größe bestimmt Gruppierung und Speicherbedarf.
     """
     folder = Path(folder)
     infos: list[FitsInfo] = []
@@ -192,12 +264,18 @@ def scan_folder(folder: Path) -> FolderScan:
         try:
             header = fits.getheader(path)
             shape, n_planes = _shape_after_mono(header)
+            pattern = bayer_pattern(header)
+            binned = debayer and pattern is not None
+            if binned:
+                shape = (shape[0] // 2, shape[1] // 2)
             infos.append(
                 FitsInfo(
                     path=path,
                     shape=shape,
                     n_planes=n_planes,
                     obs_time=header.get("DATE-OBS"),
+                    bayer=pattern,
+                    pixel_scale_arcsec=pixel_scale_from_header(header, binned=binned),
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -249,30 +327,52 @@ def select_frames_to_load(
     return candidates
 
 
-def load_fits_frame(path: Path) -> FitsFrame:
+def load_fits_frame(path: Path, debayer: bool = True) -> FitsFrame:
     with fits.open(path) as hdul:
         hdu = next(h for h in hdul if h.data is not None)
-        data = np.asarray(to_mono(hdu.data), dtype=np.float32)
         header = hdu.header
+        data = to_mono(hdu.data)
+
+        binned = debayer and bayer_pattern(header) is not None
+        if binned:
+            data = bin_bayer_2x2(data)
+
+        data = np.asarray(data, dtype=np.float32)
         try:
             wcs = WCS(header)
             wcs = wcs if wcs.has_celestial else None
         except Exception:
             wcs = None
+        if binned and wcs is not None:
+            # Nach der Mittelung stimmt ein vorhandenes WCS nicht mehr: ein Pixel deckt die
+            # doppelte Fläche ab. Ohne Anpassung wären alle daraus abgeleiteten Positionen
+            # um den Faktor zwei daneben.
+            wcs = wcs.slice((np.s_[::2], np.s_[::2]))
         obs_time = header.get("DATE-OBS")
-    return FitsFrame(path=Path(path), data=data, header=header, wcs=wcs, obs_time=obs_time)
+
+    return FitsFrame(
+        path=Path(path),
+        data=data,
+        header=header,
+        wcs=wcs,
+        obs_time=obs_time,
+        bayer_binned=binned,
+    )
 
 
 def load_frame_stack(
     folder: Path,
     max_frames: int | None = None,
     memory_budget_bytes: int = DEFAULT_MEMORY_BUDGET_BYTES,
+    debayer: bool = True,
 ) -> FrameStack:
-    scan = scan_folder(folder)
+    scan = scan_folder(folder, debayer=debayer)
     selected = select_frames_to_load(
         scan, max_frames=max_frames, memory_budget_bytes=memory_budget_bytes
     )
-    return FrameStack(frames=[load_fits_frame(info.path) for info in selected])
+    return FrameStack(
+        frames=[load_fits_frame(info.path, debayer=debayer) for info in selected]
+    )
 
 
 def stretch_to_uint8(data: np.ndarray, low_pct: float = 1.0, high_pct: float = 99.5) -> np.ndarray:

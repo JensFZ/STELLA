@@ -100,6 +100,9 @@ eine Auswahl. Was dabei aussortiert wird, steht im Log.
 
 - **Farbaufnahmen werden zu Mono gemittelt.** Entbayerte Frames liegen als drei Ebenen vor;
   für die Detektion ist die Farbe ohne Nutzen, das Mitteln verbessert sogar das Rauschen.
+- **Rohaufnahmen von Farbsensoren werden entmosaikt.** Enthält der Header `BAYERPAT`, liegt
+  das Sensormosaik noch in den Daten — als Schachbrettmuster sichtbar. STELLA mittelt dann
+  je 2×2-Block zu einem Pixel. Beim Laden lässt sich das abschalten, siehe unten.
 - **Nur eine Bildgröße.** Shift-and-Stack summiert alle Frames auf ein gemeinsames Raster.
   Liegen mehrere Größen im Ordner (Rohframes neben registrierten oder gestackten
   Ergebnissen), wird die häufigste verwendet, der Rest übersprungen.
@@ -114,6 +117,30 @@ eine Auswahl. Was dabei aussortiert wird, steht im Log.
 
 Für Synthetic Tracking ist das auch fachlich richtig: gebraucht wird ein zeitlich
 zusammenhängender Ausschnitt einer Nacht, keine Sammlung über Monate.
+
+### Bayer-Muster (Rohaufnahmen von Farbkameras)
+
+Rohframes einer Farbkamera enthalten das Sensormosaik: benachbarte Pixel messen
+verschiedene Farben und damit verschiedene Helligkeiten. Das ist als Schachbrett sichtbar
+und stört die Detektion erheblich, denn das Muster geht in die Hintergrundstatistik ein und
+hebt die SNR-Schwelle — lichtschwache Objekte fallen darunter.
+
+STELLA erkennt das an `BAYERPAT` und mittelt je 2×2-Block. An Aufnahmen eines Seestar S50
+gemessen:
+
+| | ohne Mittelung | mit Mittelung |
+|---|---|---|
+| Hintergrundrauschen | 133,1 | 90,9 |
+| erkannte Sterne je Frame | 6 | 25 |
+
+Die vierfache Sternausbeute ist der eigentliche Gewinn: darunter leidet sonst das Alignment.
+
+**Preis:** die Auflösung halbiert sich (1920×1080 → 960×540) und der Pixelmaßstab
+verdoppelt sich. Diesen berechnet STELLA aus `XPIXSZ` und `FOCALLEN` und trägt ihn in den
+Suchdialog ein — Rohframes enthalten meist kein WCS, sonst gäbe es keinen Anhaltspunkt.
+
+Abschalten lässt sich die Mittelung im Auswahldialog beim Laden; die Einstellung wird
+gemerkt. Ohne sie bleibt die volle Auflösung erhalten, das Muster aber ebenfalls.
 
 Ein Beispiel aus dem Log:
 

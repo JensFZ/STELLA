@@ -34,6 +34,7 @@ class SearchSetupDialog(QDialog):
         parent: QWidget | None = None,
         project_store: ProjectStore | None = None,
         frame_count: int = 0,
+        pixel_scale_arcsec: float | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Kandidaten suchen"))
@@ -43,7 +44,9 @@ class SearchSetupDialog(QDialog):
         self.pixel_scale_spin = QDoubleSpinBox(self)
         self.pixel_scale_spin.setRange(0.001, 100.0)
         self.pixel_scale_spin.setDecimals(3)
-        self.pixel_scale_spin.setValue(1.0)
+        # Aus den FITS-Headern abgeleiteter Maßstab, falls vorhanden — sonst bliebe nur ein
+        # Zahlenwert ohne Bezug zur Aufnahme.
+        self.pixel_scale_spin.setValue(pixel_scale_arcsec or 1.0)
         self.pixel_scale_spin.setSuffix(" arcsec/px")
 
         self.speed_min_spin = QDoubleSpinBox(self)

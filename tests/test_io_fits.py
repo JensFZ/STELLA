@@ -6,11 +6,13 @@ from astropy.io import fits
 
 from core.io_fits import (
     FitsInfo,
+    bin_bayer_2x2,
     find_fits_files,
     group_into_sessions,
     load_fits_frame,
     load_frame_stack,
     make_thumbnail,
+    pixel_scale_from_header,
     scan_folder,
     select_frames_to_load,
     stretch_to_uint8,
@@ -247,3 +249,122 @@ def test_select_frames_can_pick_a_specific_session(tmp_path):
 
     assert len(selected) == 2
     assert all(info.obs_time.startswith("2025-02-09") for info in selected)
+
+
+def _write_bayer_fits(path, pattern: str = "GRBG", size: int = 64) -> np.ndarray:
+    """Schreibt ein Frame mit kuenstlichem Bayer-Muster: die vier Positionen im 2x2-Block
+    haben verschiedene Grundhelligkeiten, wie bei einer echten Farbmatrix."""
+    data = np.zeros((size, size), dtype=np.float32)
+    data[0::2, 0::2] = 900.0  # G
+    data[0::2, 1::2] = 800.0  # R
+    data[1::2, 0::2] = 700.0  # B
+    data[1::2, 1::2] = 900.0  # G
+    header = fits.Header()
+    header["DATE-OBS"] = "2026-01-01T00:00:00"
+    header["BAYERPAT"] = pattern
+    header["XPIXSZ"] = 2.9
+    header["FOCALLEN"] = 250.0
+    fits.writeto(path, data, header, overwrite=True)
+    return data
+
+
+def test_bin_bayer_2x2_removes_the_checkerboard():
+    """Kern der Sache: nach der Mittelung darf kein Unterschied zwischen benachbarten
+    Pixeln mehr vom Muster stammen."""
+    data = np.zeros((8, 8))
+    data[0::2, 0::2], data[0::2, 1::2] = 900.0, 800.0
+    data[1::2, 0::2], data[1::2, 1::2] = 700.0, 900.0
+
+    binned = bin_bayer_2x2(data)
+
+    assert binned.shape == (4, 4)
+    assert np.allclose(binned, (900 + 800 + 700 + 900) / 4)
+
+
+def test_bin_bayer_2x2_lowers_background_noise():
+    """Das Muster geht sonst in die Hintergrundstatistik ein und hebt die SNR-Schwelle,
+    sodass lichtschwache Objekte uebersehen werden."""
+    from astropy.stats import sigma_clipped_stats
+
+    rng = np.random.default_rng(0)
+    data = rng.normal(800.0, 20.0, size=(128, 128))
+    data[0::2, 1::2] -= 100.0  # R dunkler
+    data[1::2, 0::2] -= 140.0  # B noch dunkler
+
+    _, _, std_raw = sigma_clipped_stats(data, sigma=3.0)
+    _, _, std_binned = sigma_clipped_stats(bin_bayer_2x2(data), sigma=3.0)
+
+    assert std_binned < std_raw / 2
+
+
+def test_bin_bayer_2x2_handles_odd_dimensions():
+    """Ungerade Kantenlaengen duerfen nicht zum Absturz fuehren."""
+    binned = bin_bayer_2x2(np.ones((9, 7)))
+
+    assert binned.shape == (4, 3)
+
+
+def test_load_fits_frame_applies_bayer_binning(tmp_path):
+    path = tmp_path / "roh.fit"
+    _write_bayer_fits(path, size=64)
+
+    frame = load_fits_frame(path)
+
+    assert frame.bayer_binned is True
+    assert frame.data.shape == (32, 32)
+    assert np.allclose(frame.data, 825.0)
+
+
+def test_load_fits_frame_can_keep_the_bayer_mosaic(tmp_path):
+    path = tmp_path / "roh.fit"
+    _write_bayer_fits(path, size=64)
+
+    frame = load_fits_frame(path, debayer=False)
+
+    assert frame.bayer_binned is False
+    assert frame.data.shape == (64, 64)
+
+
+def test_load_fits_frame_leaves_debayered_data_untouched(tmp_path):
+    """Ohne BAYERPAT im Header darf nichts gemittelt werden — sonst verloere man bei
+    bereits entbayerten Aufnahmen grundlos die halbe Aufloesung."""
+    path = tmp_path / "fertig.fits"
+    _write_fits(path, 1, shape=(64, 64))
+
+    frame = load_fits_frame(path)
+
+    assert frame.bayer_binned is False
+    assert frame.data.shape == (64, 64)
+
+
+def test_scan_reports_bayer_pattern_and_halved_shape(tmp_path):
+    _write_bayer_fits(tmp_path / "a.fit", size=64)
+
+    scan = scan_folder(tmp_path)
+
+    assert scan.bayer_patterns() == {"GRBG"}
+    assert scan.dominant_shape() == (32, 32), "Bildgroesse muss die Mittelung beruecksichtigen"
+
+
+def test_scan_without_debayering_keeps_full_shape(tmp_path):
+    _write_bayer_fits(tmp_path / "a.fit", size=64)
+
+    scan = scan_folder(tmp_path, debayer=False)
+
+    assert scan.dominant_shape() == (64, 64)
+
+
+def test_pixel_scale_from_header_doubles_when_binned(tmp_path):
+    _write_bayer_fits(tmp_path / "a.fit", size=64)
+    header = fits.getheader(tmp_path / "a.fit")
+
+    unbinned = pixel_scale_from_header(header, binned=False)
+    binned = pixel_scale_from_header(header, binned=True)
+
+    # 206265 * 0.0029 mm / 250 mm = 2.393 arcsec/px
+    assert unbinned == pytest.approx(2.393, abs=0.01)
+    assert binned == pytest.approx(2 * unbinned)
+
+
+def test_pixel_scale_is_none_without_the_needed_headers():
+    assert pixel_scale_from_header(fits.Header()) is None

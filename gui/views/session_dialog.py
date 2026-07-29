@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QHeaderView,
@@ -54,6 +55,7 @@ class SessionSelectDialog(QDialog):
         scan: FolderScan,
         parent: QWidget | None = None,
         memory_budget_bytes: int = DEFAULT_MEMORY_BUDGET_BYTES,
+        debayer: bool = True,
     ):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Aufnahmeserie auswählen"))
@@ -134,8 +136,53 @@ class SessionSelectDialog(QDialog):
         layout.addWidget(QLabel(summary, self))
         layout.addWidget(self.table)
         layout.addWidget(hint)
+
+        patterns = scan.bayer_patterns()
+        self.debayer_checkbox: QCheckBox | None = None
+        if patterns:
+            self.debayer_checkbox = QCheckBox(
+                self.tr("Bayer-Muster durch 2×2-Mittelung entfernen ({pattern})").format(
+                    pattern=", ".join(sorted(patterns))
+                ),
+                self,
+            )
+            self.debayer_checkbox.setChecked(debayer)
+            self.debayer_checkbox.toggled.connect(self._on_debayer_toggled)
+            layout.addWidget(self.debayer_checkbox)
+
+            self.debayer_hint = QLabel("", self)
+            self.debayer_hint.setWordWrap(True)
+            self.debayer_hint.setStyleSheet("color: #9a9a9a; font-size: 11px;")
+            layout.addWidget(self.debayer_hint)
+            self._on_debayer_toggled(debayer)
+
         layout.addWidget(buttons)
+
+    def _on_debayer_toggled(self, enabled: bool) -> None:
+        """Erklärt die Folgen der Einstellung — sie verändert Auflösung und Pixelmaßstab."""
+        if enabled:
+            self.debayer_hint.setText(
+                self.tr(
+                    "Entfernt das Sensormosaik der Farbkamera. Ohne die Mittelung geht das "
+                    "Muster in die Hintergrundstatistik ein und hebt die SNR-Schwelle, "
+                    "sodass lichtschwache Objekte übersehen werden.\n"
+                    "Dafür halbiert sich die Auflösung und der Pixelmaßstab verdoppelt sich."
+                )
+            )
+        else:
+            self.debayer_hint.setText(
+                self.tr(
+                    "Die volle Auflösung bleibt erhalten, das Schachbrettmuster der "
+                    "Farbmatrix aber ebenfalls — es erhöht das gemessene Hintergrundrauschen "
+                    "und damit die Nachweisgrenze."
+                )
+            )
 
     def selected_session_index(self) -> int:
         row = self.table.currentRow()
         return row if row >= 0 else 0
+
+    def debayer_enabled(self) -> bool:
+        """Ohne Bayer-Daten im Ordner erscheint das Kästchen nicht; dann ist die Antwort
+        bedeutungslos und die Vorgabe bleibt."""
+        return self.debayer_checkbox.isChecked() if self.debayer_checkbox else True
