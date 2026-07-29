@@ -36,9 +36,26 @@ Ordner ist das Auslieferungspaket und muss zusammen weitergegeben werden.
   dynamisch auf, die der statische Import-Scanner von PyInstaller nicht findet. Für
   `astropy`, `astropy_iers_data`, `torch` und `PySide6` bringt PyInstaller eigene Hooks
   mit, die das bereits abdecken.
-- **`excludes`** für ungenutzte Qt-Module (WebEngine, 3D, Multimedia, QML) sowie für
-  Torch-Test- und Compiler-Infrastruktur. STELLA nutzt von Torch nur Tensor-Operationen
-  und `grid_sample`.
+- **`excludes` bewusst minimal.** Ausgeschlossen sind nur `ruff` und `PyInstaller`, die die
+  Anwendung nachweislich nicht importiert.
+
+  Frühere Versuche, das Bundle über Ausschlüsse zu verkleinern, sind gescheitert: der
+  Ausschluss von `torch.distributed` (zusammen mit `torch.testing` und
+  `torch.utils.tensorboard`) führte beim Start zu `ModuleNotFoundError: No module named
+  'torch.distributed'` — torch importiert das Modul selbst über `torch.utils.data.dataloader`,
+  also bereits bei `import torch`. Ein Modul, das ein Paket intern importiert, darf nicht
+  ausgeschlossen werden, auch wenn die eigene Anwendung es nie direkt verwendet.
+
+  Weitere Größenoptimierung ist denkbar (etwa ungenutzte Qt-Module), muss aber jedes Mal mit
+  dem Smoke-Test unten überprüft werden — der Fehler zeigt sich erst zur Laufzeit, nicht
+  beim Bauen.
+- **`copy_metadata` für photutils und astroquery.** photutils ermittelt seine optionalen
+  Abhängigkeiten zur Laufzeit über `importlib.metadata.requires("photutils")`. Sind die
+  `dist-info`-Metadaten nicht im Bundle, bricht bereits der Import mit
+  `PackageNotFoundError: No package metadata was found for photutils` ab. Datendateien
+  allein (`collect_data_files`) reichen dafür **nicht** — Metadaten sind ein eigener
+  Mechanismus. `recursive=True` nimmt die Metadaten der Abhängigkeiten mit; sie sind winzig
+  und schützen vor derselben Falle an anderer Stelle.
 - **matplotlib als reine Build-Abhängigkeit** (im Extra `packaging`). STELLA verwendet
   matplotlib nicht direkt, `photutils` importiert aber `astropy.visualization`, das
   matplotlib-gestützt ist. PyInstaller importiert beim Analysieren jedes gesammelte Paket
@@ -73,12 +90,21 @@ Ordner ist das Auslieferungspaket und muss zusammen weitergegeben werden.
 ## Smoke-Test nach dem Build
 
 ```bash
-dist\STELLA\STELLA.exe
+powershell -ExecutionPolicy Bypass -File scripts\smoke_test_build.ps1
 ```
 
-Das Hauptfenster muss erscheinen; über *Datei → FITS-Ordner öffnen* lässt sich ein
-Bildstapel laden. Ein automatisierter Start-Check ohne sichtbares Fenster ist über die
-Umgebungsvariable `QT_QPA_PLATFORM=offscreen` möglich.
+Das Skript startet das gebaute Programm und prüft, ob das **Qt-Hauptfenster mit dem Titel
+„STELLA"** erscheint.
+
+> **Nicht nur prüfen, ob der Prozess läuft.** Bei `console=False` zeigt PyInstaller im
+> Fehlerfall einen modalen Dialog „Unhandled exception in script“ — der hält den Prozess am
+> Leben und meldet sogar `Responding=True`. Ein Test, der nur auf „Prozess lebt“ schaut,
+> meldet deshalb auch bei einem harten Importfehler Erfolg. Genau so ist hier ein defektes
+> Bundle durchgerutscht (fehlende Paket-Metadaten, siehe oben). Der Fenstertitel
+> unterscheidet die beiden Fälle zuverlässig.
+
+Aus demselben Grund läuft der Test bewusst **ohne** `QT_QPA_PLATFORM=offscreen`: ohne echtes
+Fenster gäbe es keinen Titel zum Prüfen.
 
 Ein erfolgreicher Start deckt bereits einen Großteil des Bundles ab: das Fenster erscheint
 erst, wenn `main.py` → `gui.main_window` → `gui.workers` → `core.*` vollständig importiert
@@ -99,7 +125,7 @@ ins Dateisystem allein ist daher irreführend.
 
 Zuletzt gebaut und geprüft auf Windows 11 (Python 3.12, PyInstaller 6.21):
 
-- Bundle-Größe: ca. 689 MB (dominiert von PyTorch)
-- `STELLA.exe` startet und bleibt stabil (Smoke-Test bestanden)
+- Bundle-Größe: ca. 704 MB (dominiert von PyTorch)
+- `STELLA.exe` startet, das Hauptfenster „STELLA“ erscheint (Smoke-Test bestanden)
 - `astroquery.gaia` samt Abhängigkeiten (`requests`, `pyvo`, `bs4`, `html5lib`, `urllib3`,
   `keyring`) im Archiv enthalten

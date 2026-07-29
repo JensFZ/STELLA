@@ -9,7 +9,7 @@ das Bundle enthält PyTorch und ist mehrere hundert MB groß, ein Ein-Datei-Buil
 müsste das bei jedem Start erst entpacken und würde entsprechend lange brauchen.
 """
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 datas = []
 hiddenimports = []
@@ -25,27 +25,29 @@ for package in ("astroquery", "photutils"):
     datas += collect_data_files(package)
     hiddenimports += collect_submodules(package, on_error="ignore")
 
+# Paket-Metadaten (dist-info) müssen mit ins Bundle: photutils ermittelt seine optionalen
+# Abhängigkeiten zur Laufzeit über importlib.metadata.requires("photutils") und bricht
+# ohne die Metadaten schon beim Import mit PackageNotFoundError ab. `recursive=True`
+# nimmt die Metadaten der Abhängigkeiten gleich mit — sie sind winzig und schützen vor
+# derselben Falle an anderer Stelle.
+for package in ("photutils", "astroquery"):
+    datas += copy_metadata(package, recursive=True)
+
 # pyerfa bringt Zeit-/Koordinaten-Tabellen mit, die astropy zur Laufzeit erwartet.
 datas += collect_data_files("erfa")
 
+# Ausschlüsse sind bewusst zurückhaltend gehalten. Ein Ausschluss spart nur dann Platz,
+# wenn das Modul wirklich ungenutzt ist — importiert das Paket es intern, bricht die
+# Anwendung erst zur Laufzeit ab.
+#
+# Nicht ausschließen: Teilmodule von torch. Ein Versuch, `torch.distributed`,
+# `torch.testing` und `torch.utils.tensorboard` herauszunehmen, führte zu
+# `ModuleNotFoundError: No module named 'torch.distributed'` beim Start — torch importiert
+# das Modul selbst über `torch.utils.data.dataloader`, also schon bei `import torch`.
 excludes = [
-    # Reine Entwicklungs-/Testabhängigkeiten gehören nicht ins Auslieferungspaket.
-    "pytest",
+    # Reine Entwicklungs-/Testwerkzeuge, von der Anwendung nicht importiert.
     "ruff",
     "PyInstaller",
-    # Nicht genutzte Qt-Module: sparen im Bundle deutlich Platz.
-    "PySide6.QtWebEngineCore",
-    "PySide6.QtWebEngineWidgets",
-    "PySide6.Qt3DCore",
-    "PySide6.Qt3DRender",
-    "PySide6.QtMultimedia",
-    "PySide6.QtQuick",
-    "PySide6.QtQml",
-    # Torch bringt Test- und Compiler-Infrastruktur mit, die zur Laufzeit nicht
-    # gebraucht wird (STELLA nutzt nur Tensor-Operationen und grid_sample).
-    "torch.distributed",
-    "torch.testing",
-    "torch.utils.tensorboard",
 ]
 
 a = Analysis(
