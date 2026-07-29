@@ -18,6 +18,13 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.5",
 ]
+packaging = [
+    "pyinstaller>=6.0",
+    # Build-Abhängigkeit, nicht von STELLA selbst genutzt: photutils importiert
+    # astropy.visualization, das matplotlib-gestützt ist. PyInstaller importiert beim
+    # Analysieren jedes gesammelte Paket — ohne matplotlib bricht der Build dort ab.
+    "matplotlib>=3.8",
+]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

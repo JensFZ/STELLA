@@ -4,6 +4,8 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+# PyInstaller-Artefakte (die .spec-Datei ist dagegen versioniert)
+*.manifest
 .pytest_cache/
 .ruff_cache/
 *.db
