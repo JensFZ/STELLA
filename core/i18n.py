@@ -61,6 +61,15 @@ def current_language() -> str:
     return _current_language
 
 
+def _system_language() -> str:
+    """Sprachkürzel des Betriebssystems, z.B. „de“ aus „de_DE“.
+
+    Eigene Funktion, damit Tests sie ersetzen können: sonst hinge ihr Ergebnis von der
+    Spracheinstellung des ausführenden Rechners ab.
+    """
+    return QLocale.system().name().split("_")[0]
+
+
 def resolve_language(explicit: str | None = None) -> str:
     """Ermittelt die zu verwendende Sprache.
 
@@ -71,7 +80,7 @@ def resolve_language(explicit: str | None = None) -> str:
         explicit,
         os.environ.get(LANGUAGE_ENV_VAR),
         saved_language(),
-        QLocale.system().name().split("_")[0],
+        _system_language(),
     ]
     for candidate in candidates:
         if candidate and candidate in SUPPORTED_LANGUAGES:

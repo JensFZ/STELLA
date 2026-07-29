@@ -2,6 +2,8 @@
 name = "stella"
 version = "0.1.0"
 description = "STELLA — Synthetic Tracking Engine for Locating & Logging Asteroids"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "PySide6>=6.6",
@@ -27,7 +29,9 @@ packaging = [
 ]
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# setuptools>=77 wegen der SPDX-Lizenzangabe oben (PEP 639); ältere Versionen kennen
+# `license = "MIT"` als Zeichenkette nicht und brechen beim Erzeugen der Metadaten ab.
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

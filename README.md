@@ -277,5 +277,8 @@ QT_QPA_PLATFORM=offscreen pytest
 
 ## Lizenz
 
-Noch nicht festgelegt. Bis eine `LICENSE`-Datei ergänzt ist, gelten die Standardregeln des
-Urheberrechts — eine Weitergabe oder Nutzung durch Dritte ist damit formal nicht gestattet.
+[MIT](LICENSE) — Nutzung, Änderung und Weitergabe sind gestattet, solange Copyright- und
+Lizenzhinweis erhalten bleiben. Die Software wird ohne Gewährleistung bereitgestellt.
+
+Das betrifft nur STELLA selbst. Die eingebundenen Bibliotheken stehen unter eigenen
+Lizenzen; im gebauten Paket sind PySide6/Qt (LGPL v3) und PyTorch (BSD) die wesentlichen.
