@@ -29,7 +29,7 @@ Ergebnisse zunächst kritisch gegenprüfen.
 ## Funktionsumfang
 
 - **FITS-Import** ganzer Ordner, inklusive Header- und WCS-Auswertung
-- **Viewer** mit Zoom, Histogramm-Stretch, Thumbnail-Leiste und Frame-Blink
+- **Viewer** mit Zoom, Stretch, Thumbnail-Leiste und Frame-Blink
 - **Alignment**: Sternerkennung via photutils, Registrierung aller Frames auf einen
   Referenzframe, erkannte Sterne als Overlay
 - **Synthetic Tracking** über ein konfigurierbares Gitter aus Geschwindigkeit × Richtung,
@@ -141,6 +141,20 @@ Suchdialog ein — Rohframes enthalten meist kein WCS, sonst gäbe es keinen Anh
 
 Abschalten lässt sich die Mittelung im Auswahldialog beim Laden; die Einstellung wird
 gemerkt. Ohne sie bleibt die volle Auflösung erhalten, das Muster aber ebenfalls.
+
+### Darstellung im Viewer
+
+Die beiden Regler über dem Bild setzen Schwarz- und Weißpunkt als Vielfache des
+Hintergrundrauschens σ, nicht als Perzentile. Der Unterschied ist erheblich: in einer
+Astroaufnahme sind über 99 % der Pixel Hintergrund, ein 1 %–99,5 %-Stretch legt beide
+Grenzen also mitten ins Rauschen. Er spannt dann rund 4 σ über die gesamte Graustufenskala,
+und der Himmel erscheint als Fernsehschnee statt als schwarze Fläche.
+
+Voreingestellt sind −1 σ und +20 σ. Ist ein Ziel zu schwach, den Weißpunkt senken — das holt
+Schwaches hervor, lässt aber das Rauschen mitkommen.
+
+Das betrifft ausschließlich die Anzeige. Die Detektion rechnet auf den Rohwerten mit eigener
+Statistik; kein Reglerwert verändert ein Ergebnis.
 
 Ein Beispiel aus dem Log:
 

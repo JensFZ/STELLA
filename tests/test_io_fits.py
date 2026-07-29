@@ -6,6 +6,7 @@ from astropy.io import fits
 
 from core.io_fits import (
     FitsInfo,
+    background_stats,
     bin_bayer_2x2,
     find_fits_files,
     group_into_sessions,
@@ -54,11 +55,52 @@ def test_load_frame_stack_reads_data_and_header(tmp_path):
 def test_stretch_to_uint8_range():
     data = np.array([[0.0, 50.0], [100.0, np.nan]], dtype=np.float32)
 
-    result = stretch_to_uint8(data, low_pct=0.0, high_pct=100.0)
+    result = stretch_to_uint8(data)
 
     assert result.dtype == np.uint8
     assert result.min() >= 0
     assert result.max() <= 255
+
+
+def _noisy_sky_with_star(seed: int = 7) -> np.ndarray:
+    """Hintergrunddominiertes Bild wie eine echte Kurzbelichtung: ein Stern, sonst Rauschen."""
+    rng = np.random.default_rng(seed)
+    data = rng.normal(1000.0, 10.0, size=(128, 128)).astype(np.float32)
+    data[64, 64] += 100 * 10.0  # ein Stern mit 100 Sigma
+    return data
+
+
+def test_stretch_shows_background_as_dark_sky():
+    """Der Hintergrund muss dunkel bleiben, sonst erscheint das Rauschen als Bildinhalt.
+
+    Ein Perzentil-Stretch legt hier beide Grenzen ins Rauschen (1 % und 99,5 % liegen bei
+    ±2,5 Sigma) und bildet den Himmel über die halbe Graustufenskala ab — das Bild sieht
+    dann aus wie Fernsehschnee. Deshalb wird am Hintergrundpegel verankert."""
+    data = _noisy_sky_with_star()
+
+    result = stretch_to_uint8(data)
+
+    sky = np.delete(result.ravel(), 64 * 128 + 64)
+    assert sky.mean() < 30, f"Himmel zu hell: Mittelwert {sky.mean():.1f} von 255"
+    assert sky.std() < 20, f"Rauschen zu sichtbar: Streuung {sky.std():.1f} Graustufen"
+    assert result[64, 64] == 255, "Der Stern muss trotzdem voll ausgesteuert sein"
+
+
+def test_background_stats_ignores_stars():
+    data = _noisy_sky_with_star()
+
+    median, sigma = background_stats(data)
+
+    assert median == pytest.approx(1000.0, abs=1.0)
+    assert sigma == pytest.approx(10.0, rel=0.1)
+
+
+def test_background_stats_survives_flat_image():
+    """Ein Bild ohne Rauschen darf keine Division durch null auslösen."""
+    median, sigma = background_stats(np.full((16, 16), 42.0, dtype=np.float32))
+
+    assert median == pytest.approx(42.0)
+    assert sigma > 0
 
 
 def test_make_thumbnail_downsamples():

@@ -91,37 +91,47 @@ The exposures need a DATE-OBS timestamp in the header — it is the basis of the
 <context>
     <name>ImageViewer</name>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="127" />
+        <location filename="../gui/views/image_viewer.py" line="128" />
         <source>Keine Frames geladen</source>
         <translation>No frames loaded</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="133" />
+        <location filename="../gui/views/image_viewer.py" line="138" />
         <source>Schwarzpunkt </source>
         <translation>Black point </translation>
     </message>
     <message>
         <location filename="../gui/views/image_viewer.py" line="140" />
+        <source>Untere Stretch-Grenze als Vielfaches des Hintergrundrauschens.</source>
+        <translation>Lower stretch bound as a multiple of the background noise.</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/image_viewer.py" line="149" />
         <source>Weißpunkt </source>
         <translation>White point </translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="143" />
+        <location filename="../gui/views/image_viewer.py" line="152" />
+        <source>Obere Stretch-Grenze als Vielfaches des Hintergrundrauschens. Kleinere Werte holen Schwaches hervor, lassen aber das Rauschen mitkommen.</source>
+        <translation>Upper stretch bound as a multiple of the background noise. Lower values bring out faint detail, but the noise comes along.</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/image_viewer.py" line="158" />
         <source>Blink</source>
         <translation>Blink</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="147" />
+        <location filename="../gui/views/image_viewer.py" line="162" />
         <source>Sterne anzeigen</source>
         <translation>Show stars</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="153" />
+        <location filename="../gui/views/image_viewer.py" line="168" />
         <source>Einpassen</source>
         <translation>Fit to view</translation>
     </message>
     <message>
-        <location filename="../gui/views/image_viewer.py" line="293" />
+        <location filename="../gui/views/image_viewer.py" line="309" />
         <source>Keine Frames gefunden</source>
         <extracomment>Die Aufteilung wird beim ersten Anzeigen gesetzt — vorher steht die tatsächliche Höhe nicht fest und eine anteilige Verteilung wäre sinnlos. Danach bleibt die Einstellung des Nutzers unangetastet.</extracomment>
         <translation>No frames found</translation>

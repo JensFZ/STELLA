@@ -88,7 +88,10 @@ def _thumbnail_pixmap(image: np.ndarray) -> QPixmap:
     Der Ausschnitt ist um die Fundposition zentriert (siehe core.detection). Ohne
     Markierung ist im Rauschen nicht erkennbar, worauf sich der Treffer bezieht.
     """
-    stretched = np.ascontiguousarray(stretch_to_uint8(image))
+    # Engerer Stretch als im Viewer: hier geht es um Kandidaten dicht an der SNR-Schwelle.
+    # Bei der Viewer-Voreinstellung von 20 σ bliebe ein 5-σ-Fund fast schwarz. Dass helle
+    # Sterne dabei ausbrennen, ist in einem Vorschaubild ohne Belang.
+    stretched = np.ascontiguousarray(stretch_to_uint8(image, low_sigma=-1.0, high_sigma=8.0))
     height, width = stretched.shape
     qimage = QImage(stretched.data, width, height, width, QImage.Format.Format_Grayscale8).copy()
     pixmap = QPixmap.fromImage(qimage).scaled(

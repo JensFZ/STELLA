@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.alignment import RegisteredStack
-from core.io_fits import FrameStack, make_thumbnail, stretch_to_uint8
+from core.io_fits import FrameStack, background_stats, make_thumbnail, stretch_to_uint8
 
 STAR_MARKER_RADIUS = 6
 STAR_MARKER_COLOR = Qt.GlobalColor.red
@@ -95,6 +95,7 @@ class ImageViewer(QWidget):
         self._stack: FrameStack | None = None
         self._registered: RegisteredStack | None = None
         self._index = 0
+        self._stats_cache: dict[int, tuple[float, float]] = {}
         self._blink_timer = QTimer(self)
         self._blink_timer.timeout.connect(self._blink_tick)
         self._blink_partner = 0
@@ -126,19 +127,33 @@ class ImageViewer(QWidget):
 
         self.frame_label = QLabel(self.tr("Keine Frames geladen"), self)
 
-        self.low_pct_spin = QDoubleSpinBox(self)
-        self.low_pct_spin.setRange(0.0, 49.0)
-        self.low_pct_spin.setValue(1.0)
-        self.low_pct_spin.setSuffix(" %")
-        self.low_pct_spin.setPrefix(self.tr("Schwarzpunkt "))
-        self.low_pct_spin.valueChanged.connect(self._update_display)
+        # Beide Grenzen als Vielfache des Hintergrundrauschens, nicht als Perzentile:
+        # siehe stretch_to_uint8. Der Schwarzpunkt darf unter den Median, sonst wäre die
+        # Hälfte des Himmels abgeschnitten und das Bild wirkte tot.
+        self.low_sigma_spin = QDoubleSpinBox(self)
+        self.low_sigma_spin.setRange(-10.0, 10.0)
+        self.low_sigma_spin.setValue(-1.0)
+        self.low_sigma_spin.setSingleStep(0.5)
+        self.low_sigma_spin.setSuffix(" σ")
+        self.low_sigma_spin.setPrefix(self.tr("Schwarzpunkt "))
+        self.low_sigma_spin.setToolTip(
+            self.tr("Untere Stretch-Grenze als Vielfaches des Hintergrundrauschens.")
+        )
+        self.low_sigma_spin.valueChanged.connect(self._update_display)
 
-        self.high_pct_spin = QDoubleSpinBox(self)
-        self.high_pct_spin.setRange(51.0, 100.0)
-        self.high_pct_spin.setValue(99.5)
-        self.high_pct_spin.setSuffix(" %")
-        self.high_pct_spin.setPrefix(self.tr("Weißpunkt "))
-        self.high_pct_spin.valueChanged.connect(self._update_display)
+        self.high_sigma_spin = QDoubleSpinBox(self)
+        self.high_sigma_spin.setRange(1.0, 500.0)
+        self.high_sigma_spin.setValue(20.0)
+        self.high_sigma_spin.setSingleStep(5.0)
+        self.high_sigma_spin.setSuffix(" σ")
+        self.high_sigma_spin.setPrefix(self.tr("Weißpunkt "))
+        self.high_sigma_spin.setToolTip(
+            self.tr(
+                "Obere Stretch-Grenze als Vielfaches des Hintergrundrauschens. "
+                "Kleinere Werte holen Schwaches hervor, lassen aber das Rauschen mitkommen."
+            )
+        )
+        self.high_sigma_spin.valueChanged.connect(self._update_display)
 
         self.blink_button = QPushButton(self.tr("Blink"), self)
         self.blink_button.setCheckable(True)
@@ -154,8 +169,8 @@ class ImageViewer(QWidget):
         self.fit_button.clicked.connect(self.view.reset_fit)
 
         controls = QHBoxLayout()
-        controls.addWidget(self.low_pct_spin)
-        controls.addWidget(self.high_pct_spin)
+        controls.addWidget(self.low_sigma_spin)
+        controls.addWidget(self.high_sigma_spin)
         controls.addWidget(self.blink_button)
         controls.addWidget(self.star_overlay_button)
         controls.addWidget(self.fit_button)
@@ -244,8 +259,8 @@ class ImageViewer(QWidget):
     def _set_controls_enabled(self, enabled: bool) -> None:
         for widget in (
             self.frame_slider,
-            self.low_pct_spin,
-            self.high_pct_spin,
+            self.low_sigma_spin,
+            self.high_sigma_spin,
             self.blink_button,
             self.thumbnail_list,
         ):
@@ -255,6 +270,7 @@ class ImageViewer(QWidget):
         self._stack = stack
         self._registered = None
         self._index = 0
+        self._stats_cache.clear()
         self.blink_button.setChecked(False)
         self.star_overlay_button.setChecked(False)
         self.star_overlay_button.setEnabled(False)
@@ -311,6 +327,17 @@ class ImageViewer(QWidget):
         self._update_display()
         self.frame_changed.emit(index)
 
+    def _background_stats(self, index: int) -> tuple[float, float]:
+        """Hintergrundstatistik des Frames, einmal berechnet und gemerkt.
+
+        Sigma-Clipping über ein ganzes Bild dauert spürbar. Ohne Zwischenspeicher liefe es
+        bei jedem Klick auf die Stretch-Regler erneut, und der Regler ruckelte."""
+        cached = self._stats_cache.get(index)
+        if cached is None:
+            cached = background_stats(self._stack[index].data)
+            self._stats_cache[index] = cached
+        return cached
+
     def _update_display(self) -> None:
         self._render_frame(self._index)
 
@@ -319,7 +346,10 @@ class ImageViewer(QWidget):
             return
         frame = self._stack[index]
         stretched = stretch_to_uint8(
-            frame.data, low_pct=self.low_pct_spin.value(), high_pct=self.high_pct_spin.value()
+            frame.data,
+            low_sigma=self.low_sigma_spin.value(),
+            high_sigma=self.high_sigma_spin.value(),
+            stats=self._background_stats(index),
         )
         pixmap = QPixmap.fromImage(_to_qimage(stretched))
 

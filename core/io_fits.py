@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
 from astropy.wcs import WCS
 
 logger = logging.getLogger(__name__)
@@ -375,12 +376,31 @@ def load_frame_stack(
     )
 
 
-def stretch_to_uint8(data: np.ndarray, low_pct: float = 1.0, high_pct: float = 99.5) -> np.ndarray:
-    """Percentile-basiertes Histogram-Stretch nach 0-255 uint8."""
+def background_stats(data: np.ndarray) -> tuple[float, float]:
+    """Hintergrund-Median und -Rauschen, robust gegen Sterne (sigma-clipped)."""
     finite = data[np.isfinite(data)]
     if finite.size == 0:
-        return np.zeros_like(data, dtype=np.uint8)
-    lo, hi = np.percentile(finite, [low_pct, high_pct])
+        return 0.0, 1.0
+    _, median, sigma = sigma_clipped_stats(finite, sigma=3.0)
+    # Ein flaches Bild hat kein Rauschen; ohne Untergrenze wuerde durch null geteilt.
+    return float(median), float(sigma) if sigma > 0 else 1.0
+
+
+def stretch_to_uint8(
+    data: np.ndarray,
+    low_sigma: float = -1.0,
+    high_sigma: float = 20.0,
+    stats: tuple[float, float] | None = None,
+) -> np.ndarray:
+    """Lineares Stretch nach 0-255 uint8, verankert am Hintergrundrauschen.
+
+    Die Grenzen liegen bei `median + n * sigma`. Ein Perzentil-Stretch taugt hier nicht:
+    in einer Astroaufnahme sind über 99 % der Pixel Hintergrund, seine Grenzen liegen also
+    beide im Rauschen und spannen wenige Sigma über die ganze Graustufenskala — der
+    Hintergrund erscheint dann als Bildrauschen statt als schwarzer Himmel."""
+    median, sigma = stats if stats is not None else background_stats(data)
+    lo = median + low_sigma * sigma
+    hi = median + high_sigma * sigma
     if hi <= lo:
         hi = lo + 1.0
     clipped = np.clip((np.nan_to_num(data, nan=lo) - lo) / (hi - lo), 0.0, 1.0)
