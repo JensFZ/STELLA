@@ -1,6 +1,6 @@
 [project]
 name = "stella"
-version = "0.1.0"
+version = "0.1.1"
 description = "STELLA — Synthetic Tracking Engine for Locating & Logging Asteroids"
 license = "MIT"
 license-files = ["LICENSE"]
