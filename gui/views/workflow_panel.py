@@ -2,14 +2,21 @@ from __future__ import annotations
 
 from enum import Enum
 
-from PySide6.QtCore import QCoreApplication, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QLabel,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
+
+#: Dauer eines vollen Pulszyklus (hell -> gedimmt -> hell) in Millisekunden.
+PULSE_DURATION_MS = 1400
+#: Untere Deckkraft des Pulses. Nicht bis 0, sonst wirkt die Zeile kurz wie ausgeschaltet
+#: statt wie ein Atmen.
+PULSE_MIN_OPACITY = 0.55
 
 
 class StepState(Enum):
@@ -59,6 +66,21 @@ class _StepRow(QFrame):
         layout.addWidget(self.title_label)
         layout.addWidget(self.detail_label)
 
+        # Sanftes Pulsieren markiert den Schritt, an dem es weitergeht — ohne einen
+        # zusätzlichen "Weiter"-Button, der bei zwei parallel verfügbaren Schritten (siehe
+        # WorkflowPanel-Docstring) ohnehin eine Reihenfolge vortäuschen würde, die es nicht
+        # gibt. Läuft nur für StepState.AVAILABLE; DONE/RUNNING/LOCKED bleiben ruhig.
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(1.0)
+        self.setGraphicsEffect(self._opacity_effect)
+        self._pulse = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._pulse.setDuration(PULSE_DURATION_MS)
+        self._pulse.setStartValue(1.0)
+        self._pulse.setKeyValueAt(0.5, PULSE_MIN_OPACITY)
+        self._pulse.setEndValue(1.0)
+        self._pulse.setEasingCurve(QEasingCurve.Type.InOutSine)
+        self._pulse.setLoopCount(-1)
+
         self._apply_state()
 
     def set_state(self, state: StepState, detail: str = "") -> None:
@@ -66,6 +88,12 @@ class _StepRow(QFrame):
         self.detail_label.setText(detail)
         self.detail_label.setVisible(bool(detail))
         self._apply_state()
+        if state == StepState.AVAILABLE:
+            if self._pulse.state() != QPropertyAnimation.State.Running:
+                self._pulse.start()
+        else:
+            self._pulse.stop()
+            self._opacity_effect.setOpacity(1.0)
 
     def state(self) -> StepState:
         return self._state
