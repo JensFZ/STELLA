@@ -284,6 +284,13 @@ Auf CPU-only-Hardware bringt der PyTorch-Pfad keinen Vorteil gegenüber der NumP
 der Gewinn entsteht erst durch echte Parallelität auf der GPU. Messwerte und Einordnung:
 [benchmarks/RESULTS.md](benchmarks/RESULTS.md).
 
+Der PyTorch-Pfad verarbeitet das Vektor-Gitter intern in Speicher-begrenzten Blöcken (siehe
+`core.gpu_tracking._max_vectors_per_batch`). Ohne diese Unterteilung wuchs der für einen
+grid_sample()-Durchlauf nötige Speicher mit Vektoren × Frames × Bildgröße — bei einer
+realen Aufnahmeserie (83 Frames, 960×540) und einem im Suchdialog typischen Gitter reichte
+das, um auf einer Maschine ohne CUDA (`RuntimeError: ... not enough memory: you tried to
+allocate 2753740800 bytes`) abzustürzen.
+
 ## Tests
 
 ```bash

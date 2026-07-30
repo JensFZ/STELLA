@@ -299,8 +299,10 @@ class DetectionWorker(QThread):
     failed = Signal(str)
 
     #: Anzahl Vektoren pro Durchlauf. Die Gittersuche wird in Blöcken abgearbeitet, damit
-    #: überhaupt Fortschritt gemeldet werden kann (die Suche kann Minuten dauern) und damit
-    #: der GPU-Batch-Tensor (n_vektoren x n_frames x H x W) nicht beliebig groß wird.
+    #: überhaupt Fortschritt gemeldet werden kann (die Suche kann Minuten dauern). Der
+    #: PyTorch-Pfad unterteilt zusätzlich selbst noch einmal nach Speicherbudget (siehe
+    #: core.gpu_tracking._max_vectors_per_batch) — dieser Wert hier ist keine
+    #: Speicherobergrenze, sondern reine Fortschritts-Granularität.
     CHUNK_SIZE = 16
 
     def __init__(

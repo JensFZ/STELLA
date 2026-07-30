@@ -35,9 +35,12 @@ GPU-Batch-Logik ist korrekt äquivalent zur CPU-Referenz (siehe `tests/test_gpu_
 
 Auf **CPU-only-Hardware** bringt die gebatchte PyTorch-Variante hier keinen Vorteil
 (~1×): scipys `ndimage.shift` ist eine bereits optimierte C-Routine, während der
-Batch-Ansatz einen einzigen sehr großen Tensor (`n_vektoren × n_frames × H × W`,
-hier ≈ 330 MB) aufbaut und per `grid_sample` verarbeitet — auf der CPU ohne
-massive Parallelität kompensiert dieser Overhead den Vorteil des Batchings.
+Batch-Ansatz für jeden Speicher-begrenzten Block einen Tensor (`Block-Vektoren × n_frames
+× H × W`) aufbaut und per `grid_sample` verarbeitet — auf der CPU ohne massive Parallelität
+kompensiert dieser Overhead den Vorteil des Batchings. (`search_velocity_grid_torch`
+verarbeitet das Gitter intern blockweise, siehe `core.gpu_tracking._max_vectors_per_batch`
+— bei diesen 126 Vektoren sind das mit dem Standardbudget mehrere Blöcke, nicht ein
+einzelner Tensor über das gesamte Gitter.)
 
 Der eigentliche Vorteil des in `core/gpu_tracking.py` implementierten Batch-Ansatzes
 entsteht auf **CUDA- oder MPS-Hardware**, wo `grid_sample` über tausende Kerne parallel

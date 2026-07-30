@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from core.alignment import FrameAlignment, RegisteredFrame, RegisteredStack, StarList
-from core.gpu_tracking import get_device, search_velocity_grid_torch
+from core.gpu_tracking import _max_vectors_per_batch, get_device, search_velocity_grid_torch
 from core.io_fits import FitsFrame, FrameStack
 from core.synthetic_tracking import VelocityVector, build_velocity_grid, search_velocity_grid
 
@@ -104,3 +104,56 @@ def test_torch_grid_search_finds_correct_vector():
 
     assert best.vector.speed_arcsec_per_min == pytest.approx(TRUE_SPEED, abs=1e-6)
     assert best.vector.angle_deg == pytest.approx(TRUE_ANGLE, abs=1e-6)
+
+
+def test_max_vectors_per_batch_shrinks_with_frame_and_image_size():
+    """Reproduziert die Größenordnung des OOM-Absturzes (RuntimeError beim Allokieren von
+    ~2,75 GB): ein echter Suchlauf mit ~83 Frames bei 960x540 und einem für den Suchdialog
+    typischen Gitter von ~240 Vektoren hätte mit der alten, unbegrenzten Implementierung
+    einen einzigen Tensor dieser Größe angelegt. Die Blockgröße muss das Gitter deutlich
+    unterteilen, nicht als ein einziger Block durchlaufen."""
+    batch_size = _max_vectors_per_batch(n_frames=83, height=540, width=960)
+
+    assert 1 <= batch_size < 240
+
+
+def test_max_vectors_per_batch_never_returns_zero():
+    """Selbst bei einem winzigen Budget muss mindestens ein Vektor pro Durchlauf möglich
+    bleiben -- sonst bricht die äußere Schleife in search_velocity_grid_torch nie ab."""
+    batch_size = _max_vectors_per_batch(
+        n_frames=1000, height=4000, width=4000, memory_budget_bytes=1
+    )
+
+    assert batch_size == 1
+
+
+def test_max_vectors_per_batch_scales_inversely_with_frame_count():
+    small = _max_vectors_per_batch(n_frames=10, height=100, width=100)
+    large = _max_vectors_per_batch(n_frames=100, height=100, width=100)
+
+    assert large < small
+
+
+def test_torch_batch_forced_into_multiple_batches_matches_single_batch():
+    """Kernprobe für die interne Unterteilung in search_velocity_grid_torch: ein winziges
+    Speicherbudget zwingt sie zu vielen Ein-Vektor-Durchläufen statt einem einzigen. Das
+    Ergebnis muss trotzdem exakt dasselbe sein wie ohne Unterteilung -- sonst hätte die
+    Umstellung von einer Tensor-Operation auf eine Schleife über Blöcke die Zuordnung von
+    Vektor zu Ergebnis verschoben oder Werte verändert."""
+    stack = _make_moving_object_stack()
+    registered = _zero_shift_registered_stack(stack)
+    grid = build_velocity_grid(
+        speed_range_arcsec_per_min=(0.0, 5.0), speed_step_arcsec_per_min=1.25, angle_step_deg=30.0
+    )
+    device = get_device(prefer="cpu")
+
+    single_batch = search_velocity_grid_torch(stack, registered, grid, PIXEL_SCALE_ARCSEC, device)
+    forced_batches = search_velocity_grid_torch(
+        stack, registered, grid, PIXEL_SCALE_ARCSEC, device, memory_budget_bytes=1
+    )
+
+    assert len(forced_batches) == len(single_batch) == len(grid)
+    for expected, actual in zip(single_batch, forced_batches, strict=True):
+        assert actual.vector == expected.vector
+        assert actual.border_margin == expected.border_margin
+        np.testing.assert_array_equal(actual.image, expected.image)
