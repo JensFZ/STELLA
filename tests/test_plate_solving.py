@@ -16,8 +16,9 @@ PIXEL_SCALE_ARCSEC = 2.393
 class _FakeAstrometryNetClient:
     """Ersetzt astroquery.astrometry_net.AstrometryNet — kein echter Netzwerkzugriff im Test."""
 
-    def __init__(self, response=None):
+    def __init__(self, response=None, raises=None):
         self._response = response
+        self._raises = raises
         self.api_key = None
         self.calls: list[dict] = []
 
@@ -25,6 +26,8 @@ class _FakeAstrometryNetClient:
         self.calls.append(
             {"x": x, "y": y, "image_width": image_width, "image_height": image_height, **kwargs}
         )
+        if self._raises is not None:
+            raise self._raises
         return self._response
 
 
@@ -34,11 +37,11 @@ def _solved_header():
     return wcs.to_header()
 
 
-def _install_fake_client(monkeypatch, response=None):
+def _install_fake_client(monkeypatch, response=None, raises=None):
     """Ersetzt astroquery.astrometry_net.AstrometryNet direkt im bereits importierten Modul --
     core.plate_solving.solve_plate importiert den Namen bei jedem Aufruf frisch von dort
     (`from astroquery.astrometry_net import AstrometryNet`), holt sich also diesen Ersatz."""
-    client = _FakeAstrometryNetClient(response)
+    client = _FakeAstrometryNetClient(response, raises)
     monkeypatch.setattr("astroquery.astrometry_net.AstrometryNet", lambda: client)
     return client
 
@@ -104,3 +107,27 @@ def test_solve_plate_sets_api_key_on_client(monkeypatch):
     solve_plate(PIXEL_X, PIXEL_Y, IMAGE_SHAPE, api_key="geheim-123")
 
     assert client.api_key == "geheim-123"
+
+
+def test_solve_plate_gives_an_actionable_message_on_timeout(monkeypatch):
+    """Nachgestellter Praxisfall: astroquery.exceptions.TimeoutError erbt NICHT vom
+    eingebauten TimeoutError und ihre str()-Form ist ein rohes Tupel
+    ("Solve timed out without success or failure", <job_id>) -- genau das landete zuvor
+    unveraendert im Fehlerdialog. solve_plate muss das in eine verstaendliche, deutsche
+    Meldung uebersetzen, die klarstellt, dass ein Timeout kein "ungueltiges Feld" bedeutet."""
+    from astroquery.exceptions import TimeoutError as AstrometryNetTimeoutError
+
+    _install_fake_client(
+        monkeypatch,
+        raises=AstrometryNetTimeoutError(
+            "Solve timed out without success or failure", 15744450
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Warteschlange") as excinfo:
+        solve_plate(PIXEL_X, PIXEL_Y, IMAGE_SHAPE, api_key="dummy", timeout_seconds=42)
+
+    message = str(excinfo.value)
+    assert "42" in message
+    assert "15744450" not in message
+    assert "Solve timed out" not in message

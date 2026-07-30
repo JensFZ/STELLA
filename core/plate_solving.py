@@ -18,6 +18,14 @@ def save_api_key(api_key: str) -> None:
     settings().setValue(_SETTINGS_KEY, api_key)
 
 
+#: astrometry.nets kostenloser öffentlicher Dienst reiht Aufträge in eine gemeinsame
+#: Warteschlange ein — bei hoher Auslastung dauert allein das Warten oft mehrere Minuten,
+#: unabhängig von der eigentlichen Rechenzeit. astroquery selbst setzt hier nur 120s
+#: (astroquery.astrometry_net.AstrometryNet.TIMEOUT); das reicht für den kostenlosen Dienst
+#: in der Praxis zu oft nicht.
+DEFAULT_TIMEOUT_SECONDS = 300
+
+
 def solve_plate(
     pixel_x: np.ndarray,
     pixel_y: np.ndarray,
@@ -25,7 +33,7 @@ def solve_plate(
     api_key: str,
     pixel_scale_arcsec: float | None = None,
     pixel_scale_tolerance_percent: float = 20.0,
-    timeout_seconds: int = 120,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> tuple[float, float, float]:
     """Blindes Plate Solving über astrometry.net (nova.astrometry.net): bestimmt Feldzentrum
     und Pixelmaßstab rein aus dem Sternmuster — ganz ohne WCS im FITS-Header und ohne
@@ -57,7 +65,9 @@ def solve_plate(
             "benötigt."
         )
 
-    from astroquery.astrometry_net import AstrometryNet  # Import erst hier: Netzwerkzugriff.
+    # Import erst hier: Netzwerkzugriff, soll den Programmstart nicht verzögern.
+    from astroquery.astrometry_net import AstrometryNet
+    from astroquery.exceptions import TimeoutError as AstrometryNetTimeoutError
 
     height, width = image_shape
     client = AstrometryNet()
@@ -70,15 +80,28 @@ def solve_plate(
         scale_settings["scale_est"] = pixel_scale_arcsec
         scale_settings["scale_err"] = pixel_scale_tolerance_percent
 
-    header = client.solve_from_source_list(
-        pixel_x,
-        pixel_y,
-        width,
-        height,
-        solve_timeout=timeout_seconds,
-        verbose=False,
-        **scale_settings,
-    )
+    try:
+        header = client.solve_from_source_list(
+            pixel_x,
+            pixel_y,
+            width,
+            height,
+            solve_timeout=timeout_seconds,
+            verbose=False,
+            **scale_settings,
+        )
+    except AstrometryNetTimeoutError as exc:
+        # astroquery.exceptions.TimeoutError erbt NICHT vom eingebauten TimeoutError (eigene
+        # Exception-Hierarchie) und ihre str()-Darstellung ist ein rohes Tupel
+        # ("Solve timed out without success or failure", <job_id>) — als Meldung im
+        # Fehlerdialog unbrauchbar. Ein Timeout heißt außerdem nicht "Feld ungelöst": der
+        # Auftrag kann serverseitig noch in der Warteschlange stehen.
+        raise RuntimeError(
+            f"astrometry.net hat innerhalb von {timeout_seconds}s nicht geantwortet. Das "
+            "bedeutet nicht zwingend, dass das Feld ungelöst blieb — der kostenlose "
+            "öffentliche Dienst reiht Aufträge in eine gemeinsame Warteschlange ein und ist "
+            "bei hoher Auslastung deutlich langsamer. Erneut versuchen, ggf. etwas später."
+        ) from exc
     if not header:
         raise RuntimeError(
             "astrometry.net konnte keine Lösung finden. Häufige Ursachen: zu wenige "

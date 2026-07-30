@@ -432,7 +432,10 @@ class PlateSolveWorker(QThread):
 
     def run(self) -> None:
         started = time.perf_counter()
-        self.status.emit("Sende Sternliste an astrometry.net ...")
+        self.status.emit(
+            "Sende Sternliste an astrometry.net ... (bei hoher Auslastung des kostenlosen "
+            "Dienstes kann das mehrere Minuten dauern)"
+        )
         logger.info(
             "Starte Plate Solving: %d Sterne, Bild %s, Maßstab-Hinweis %s",
             len(self._pixel_x),

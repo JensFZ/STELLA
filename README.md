@@ -98,7 +98,9 @@ aufbaut.
    [nova.astrometry.net/api_help](https://nova.astrometry.net/api_help) nötig; STELLA
    registriert dieses Konto nicht selbst. Ist im Dialog ein Teleskop ausgewählt, geht
    dessen Pixelmaßstab als Hinweis mit — das grenzt den durchsuchten Skalenbereich ein und
-   beschleunigt die Suche erheblich.
+   beschleunigt die Suche erheblich. Der kostenlose Dienst reiht Aufträge in eine
+   gemeinsame Warteschlange ein; bei hoher Auslastung kann eine Lösung mehrere Minuten
+   dauern (Zeitlimit 5 Minuten).
 6. **Projekt → MPC-Report exportieren** schreibt die bestätigten Kandidaten heraus, mit
    einer Zeile pro Frame.
 
