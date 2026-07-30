@@ -22,6 +22,27 @@ from core.synthetic_tracking import build_velocity_grid
 
 PRESET_KIND = "search"
 
+#: Startwerte für die Suchparameter, unabhängig vom Pixelmaßstab. Eigene Konstante, damit
+#: main_window.py dieselben Werte für die eingebauten Teleskop-Presets verwenden kann,
+#: statt sie ein zweites Mal hinzuschreiben.
+DEFAULT_SEARCH_PARAMS = {
+    "speed_range_arcsec_per_min": (0.0, 10.0),
+    "speed_step_arcsec_per_min": 1.0,
+    "angle_step_deg": 15.0,
+    "snr_threshold": 5.0,
+    "use_gpu": True,
+}
+
+
+def default_parameters(pixel_scale_arcsec: float) -> dict:
+    """Vollständiger Parametersatz aus einem Pixelmaßstab, für die eingebauten Presets.
+
+    Der Pixelmaßstab ist die einzige Größe, die vom Gerät abhängt; Geschwindigkeitsbereich,
+    Winkelschritt und SNR-Schwelle richten sich nach dem gesuchten Objekt, nicht nach der
+    Kamera, und bleiben deshalb bei den Dialog-Startwerten.
+    """
+    return {"pixel_scale_arcsec": pixel_scale_arcsec, **DEFAULT_SEARCH_PARAMS}
+
 
 class SearchSetupDialog(QDialog):
     """Parameter für das Vektor-Gitter (Geschwindigkeit/Winkel) und die GPU-Auswahl.
@@ -49,34 +70,37 @@ class SearchSetupDialog(QDialog):
         self.pixel_scale_spin.setValue(pixel_scale_arcsec or 1.0)
         self.pixel_scale_spin.setSuffix(" arcsec/px")
 
+        defaults = DEFAULT_SEARCH_PARAMS
+        speed_min, speed_max = defaults["speed_range_arcsec_per_min"]
+
         self.speed_min_spin = QDoubleSpinBox(self)
         self.speed_min_spin.setRange(0.0, 1000.0)
-        self.speed_min_spin.setValue(0.0)
+        self.speed_min_spin.setValue(speed_min)
         self.speed_min_spin.setSuffix(" arcsec/min")
 
         self.speed_max_spin = QDoubleSpinBox(self)
         self.speed_max_spin.setRange(0.0, 1000.0)
-        self.speed_max_spin.setValue(10.0)
+        self.speed_max_spin.setValue(speed_max)
         self.speed_max_spin.setSuffix(" arcsec/min")
 
         self.speed_step_spin = QDoubleSpinBox(self)
         self.speed_step_spin.setRange(0.01, 100.0)
-        self.speed_step_spin.setValue(1.0)
+        self.speed_step_spin.setValue(defaults["speed_step_arcsec_per_min"])
         self.speed_step_spin.setSuffix(" arcsec/min")
 
         self.angle_step_spin = QDoubleSpinBox(self)
         self.angle_step_spin.setRange(1.0, 180.0)
-        self.angle_step_spin.setValue(15.0)
+        self.angle_step_spin.setValue(defaults["angle_step_deg"])
         self.angle_step_spin.setSuffix(" °")
 
         self.snr_threshold_spin = QDoubleSpinBox(self)
         self.snr_threshold_spin.setRange(1.0, 100.0)
-        self.snr_threshold_spin.setValue(5.0)
+        self.snr_threshold_spin.setValue(defaults["snr_threshold"])
 
         self.use_gpu_checkbox = QCheckBox(
             self.tr("PyTorch-Batch verwenden (GPU falls verfügbar)"), self
         )
-        self.use_gpu_checkbox.setChecked(True)
+        self.use_gpu_checkbox.setChecked(defaults["use_gpu"])
 
         form = QFormLayout()
         form.addRow(self.tr("Pixelmaßstab:"), self.pixel_scale_spin)

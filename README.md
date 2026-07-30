@@ -38,7 +38,8 @@ Ergebnisse zunächst kritisch gegenprüfen.
   Vorschaubild und manueller Bestätigung
 - **Astrometrie**: Gaia-Abfrage, Cross-Matching, WCS-Fit mit Residuen-Anzeige
 - **Export** im MPC-80-Spalten-Format, mit einer Beobachtungszeile je Frame
-- **Projekte**: Sitzungen und Suchparameter-Presets in SQLite
+- **Projekte**: Sitzungen und Suchparameter-Presets in SQLite. Für Seestar S50, S30 und
+  S30 Pro liegt der Pixelmaßstab bereits als Preset vor, siehe unten.
 
 ## Installation
 
@@ -178,6 +179,30 @@ Nur die längste Serie wird verwendet (1164 Frames ab 2025-02-16T23:01)
 Lade 258 Frames der Größe (1920, 1080) (~2.0 GB)
 ```
 
+## Teleskop-Presets
+
+Im Suchdialog (*Kandidaten suchen*) lässt sich unter *Preset* eines von drei mitgelieferten
+Presets laden — sie tragen bereits den korrekten Pixelmaßstab für die Seestar-Modelle:
+
+| Preset | Sensor | Brennweite | Pixelmaßstab |
+|---|---|---|---|
+| Seestar S50 | Sony IMX462 | 250 mm | 2,393″/px |
+| Seestar S30 | Sony IMX662 | 150 mm | 3,988″/px |
+| Seestar S30 Pro | Sony IMX585 (Teleobjektiv) | 160 mm | 3,739″/px |
+
+Alle drei Sensoren teilen sich eine Pixelgröße von 2,9 µm (Sony-STARVIS2-Reihe); der
+Maßstab folgt allein aus Pixelgröße und Brennweite. Der Wert für den S50 deckt sich mit dem,
+was `pixel_scale_from_header()` an echten S50-Rohframes gemessen hat (siehe oben) — eine von
+den Herstellerangaben unabhängige Bestätigung.
+
+Steht der Maßstab bereits im FITS-Header (`XPIXSZ`/`FOCALLEN`), übernimmt ihn STELLA beim
+Laden automatisch, und ein Preset ist nicht nötig. Er hilft dort, wo der Header diese Felder
+nicht enthält.
+
+Die Presets werden beim ersten Start einmalig angelegt. Wer eines löscht oder umbenennt,
+bekommt es bei künftigen Starts nicht zurück — nur eigene, unter demselben Namen gespeicherte
+Presets werden nie stillschweigend überschrieben.
+
 ## Fensteraufteilung
 
 Das Bild ist der Hauptinhalt und bekommt den Platz. Die Aufteilung passt sich an:
@@ -238,6 +263,7 @@ core/                     Fachlogik, unabhängig von der Oberfläche
   astrometry.py           Gaia-Abgleich, WCS-Fit, Residuen
   mpc_report.py           MPC-80-Spalten-Format
   project.py              Sitzungen und Presets (SQLite)
+  telescopes.py           Sensordaten bekannter Geräte für die Teleskop-Presets
 gui/
   main_window.py          Menüs und Ablaufsteuerung
   workers.py              QThread-Wrapper um die core-Funktionen

@@ -110,3 +110,31 @@ def test_delete_preset(store):
     store.delete_preset(preset.id)
 
     assert store.list_presets("search") == []
+
+
+def test_seed_presets_inserts_missing(store):
+    store.seed_presets("search", {"Seestar S50": {"pixel_scale_arcsec": 2.393}})
+
+    presets = store.list_presets("search")
+    assert len(presets) == 1
+    assert presets[0].name == "Seestar S50"
+    assert presets[0].params == {"pixel_scale_arcsec": 2.393}
+
+
+def test_seed_presets_does_not_overwrite_existing(store):
+    """Ein Preset, das die Nutzerin bereits angepasst hat, darf beim erneuten Seeden nicht
+    zurückgesetzt werden — anders als save_preset() aktualisiert seed_presets() nichts."""
+    store.save_preset("Seestar S50", "search", {"pixel_scale_arcsec": 99.0})
+
+    store.seed_presets("search", {"Seestar S50": {"pixel_scale_arcsec": 2.393}})
+
+    presets = store.list_presets("search")
+    assert len(presets) == 1
+    assert presets[0].params == {"pixel_scale_arcsec": 99.0}
+
+
+def test_seed_presets_respects_kind(store):
+    store.seed_presets("astrometry", {"Seestar S50": {"pixel_scale_arcsec": 2.393}})
+
+    assert store.list_presets("search") == []
+    assert len(store.list_presets("astrometry")) == 1

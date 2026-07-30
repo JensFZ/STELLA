@@ -25,6 +25,7 @@ from core.mpc_report import MPCObservation, write_mpc_report
 from core.project import Project, ProjectStore
 from core.settings import settings
 from core.synthetic_tracking import candidate_positions_per_frame
+from core.telescopes import KNOWN_TELESCOPES
 from gui.views.astrometry_panel import AstrometryPanel
 from gui.views.astrometry_setup import AstrometrySetupDialog
 from gui.views.empty_state import EmptyState
@@ -32,7 +33,7 @@ from gui.views.image_viewer import ImageViewer
 from gui.views.progress_panel import ProgressPanel
 from gui.views.project_dialog import OpenProjectDialog
 from gui.views.results_table import ResultsTable
-from gui.views.search_setup import SearchSetupDialog
+from gui.views.search_setup import PRESET_KIND, SearchSetupDialog, default_parameters
 from gui.views.session_dialog import SessionSelectDialog
 from gui.views.workflow_panel import StepState, WorkflowPanel
 from gui.workers import (
@@ -636,7 +637,25 @@ class MainWindow(QMainWindow):
     def _get_project_store(self) -> ProjectStore:
         if self._project_store is None:
             self._project_store = ProjectStore()
+            self._seed_builtin_presets_once()
         return self._project_store
+
+    def _seed_builtin_presets_once(self) -> None:
+        """Legt Suchparameter-Presets für bekannte Teleskope einmalig an.
+
+        Nur beim allerersten Aufruf, markiert über QSettings: sonst würde ein von der
+        Nutzerin gelöschtes oder umbenanntes Preset bei jedem Neustart wieder auftauchen.
+        seed_presets() selbst überschreibt nichts — die Absicherung hier verhindert
+        zusätzlich, dass es überhaupt erneut aufgerufen wird.
+        """
+        seeded_key = "presets/builtin_telescopes_seeded"
+        if settings().value(seeded_key, False, type=bool):
+            return
+        self._project_store.seed_presets(
+            PRESET_KIND,
+            {spec.name: default_parameters(spec.pixel_scale_arcsec) for spec in KNOWN_TELESCOPES},
+        )
+        settings().setValue(seeded_key, True)
 
     def _new_project(self) -> None:
         name, ok = QInputDialog.getText(self, self.tr("Neues Projekt"), self.tr("Projektname:"))

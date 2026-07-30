@@ -205,3 +205,17 @@ class ProjectStore:
     def delete_preset(self, preset_id: int) -> None:
         self._conn.execute("DELETE FROM presets WHERE id = ?", (preset_id,))
         self._conn.commit()
+
+    def seed_presets(self, kind: str, presets: dict[str, dict]) -> None:
+        """Legt vorgegebene Presets an, sofern noch kein Preset mit diesem Namen existiert.
+
+        Bewusst ohne ON CONFLICT-Update wie bei save_preset(): ein Preset, das die
+        Aufrufstelle hier einträgt, aber der Nutzer inzwischen angepasst oder gelöscht hat,
+        darf dadurch nicht wieder überschrieben bzw. zurückgeholt werden.
+        """
+        for name, params in presets.items():
+            self._conn.execute(
+                "INSERT OR IGNORE INTO presets (name, kind, params_json) VALUES (?, ?, ?)",
+                (name, kind, json.dumps(params)),
+            )
+        self._conn.commit()

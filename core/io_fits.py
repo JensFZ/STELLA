@@ -218,20 +218,29 @@ def to_mono(data: np.ndarray) -> np.ndarray:
     raise ValueError(f"Nicht unterstützte Bilddimension: {data.shape}")
 
 
+def pixel_scale_from_optics(pixel_size_um: float, focal_length_mm: float) -> float:
+    """Pixelmaßstab in arcsec/px aus Pixelgröße und Brennweite (Kleinwinkelnäherung).
+
+    206265 arcsec entsprechen einem Radiant; Pixelgröße in mm / Brennweite in mm. Eigene
+    Funktion, damit core.telescopes dieselbe Formel für die Teleskop-Presets nutzt statt
+    die Konstante ein zweites Mal hinzuschreiben.
+    """
+    return 206265.0 * (pixel_size_um / 1000.0) / focal_length_mm
+
+
 def pixel_scale_from_header(header: fits.Header, binned: bool = False) -> float | None:
-    """Schätzt den Pixelmaßstab in arcsec/px aus Pixelgröße und Brennweite.
+    """Schätzt den Pixelmaßstab in arcsec/px aus dem FITS-Header.
 
     Rohaufnahmen enthalten oft kein WCS (die Frames des Seestar S50 etwa nicht), wohl aber
-    XPIXSZ und FOCALLEN. Daraus ergibt sich der Maßstab über die Kleinwinkelnäherung —
-    sonst müsste der Wert geraten werden, und er bestimmt maßgeblich, welche
-    Objektgeschwindigkeiten die Suche überhaupt trifft.
+    XPIXSZ und FOCALLEN — siehe pixel_scale_from_optics(). Ohne ihn müsste der Wert
+    geraten werden, und er bestimmt maßgeblich, welche Objektgeschwindigkeiten die Suche
+    überhaupt trifft.
     """
     pixel_size_um = header.get("XPIXSZ")
     focal_length_mm = header.get("FOCALLEN")
     if not pixel_size_um or not focal_length_mm:
         return None
-    # 206265 arcsec entsprechen einem Radiant; Pixelgröße in mm / Brennweite in mm.
-    scale = 206265.0 * (float(pixel_size_um) / 1000.0) / float(focal_length_mm)
+    scale = pixel_scale_from_optics(float(pixel_size_um), float(focal_length_mm))
     return scale * 2.0 if binned else scale
 
 
