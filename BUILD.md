@@ -111,6 +111,13 @@ Bewusste Festlegungen:
 - **Gaia-Abfrage braucht Internet.** Die Astrometrie (Menü *Projekt → Astrometrie
   berechnen*) fragt den Gaia-Katalog online ab. Alle anderen Funktionen — Import, Viewer,
   Alignment, Suche, Detektion — laufen vollständig offline.
+- **Plate Solving ebenso, plus eigener API-Schlüssel.** Fehlt ein WCS im FITS-Header, lässt
+  sich das Feldzentrum im Astrometrie-Dialog blind über astrometry.net bestimmen
+  (`core/plate_solving.py`, nutzt `astroquery.astrometry_net` — bereits über astroquery
+  vorhanden, keine zusätzliche Abhängigkeit). Erfordert einen kostenlosen Schlüssel von
+  [nova.astrometry.net/api_help](https://nova.astrometry.net/api_help); STELLA legt dieses
+  Konto nicht selbst an. Der Schlüssel wird wie die Spracheinstellung über `QSettings`
+  gespeichert (`core.plate_solving.save_api_key`).
 - **GPU-Unterstützung richtet sich nach dem installierten PyTorch.** Wird im Build-venv
   ein CPU-only-Wheel verwendet (Standard von PyPI auf Rechnern ohne CUDA), enthält auch
   das Bundle nur den CPU-Pfad. Für ein Paket mit CUDA-Unterstützung muss vor dem Build ein

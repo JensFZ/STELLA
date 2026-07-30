@@ -26,45 +26,97 @@
 <context>
     <name>AstrometrySetupDialog</name>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="24" />
+        <location filename="../gui/views/astrometry_setup.py" line="42" />
         <source>Astrometrie berechnen</source>
         <translation>Compute astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="62" />
+        <location filename="../gui/views/astrometry_setup.py" line="53" />
+        <source>— manuell —</source>
+        <extracomment>Muss am Dialog hängen bleiben, sonst reißt Python den QThread mitten im Lauf ab.</extracomment>
+        <translation>— manual —</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="92" />
+        <source>Teleskop:</source>
+        <translation>Telescope:</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="93" />
         <source>Feldzentrum RA:</source>
         <translation>Field centre RA:</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="63" />
+        <location filename="../gui/views/astrometry_setup.py" line="94" />
         <source>Feldzentrum Dec:</source>
         <translation>Field centre Dec:</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="64" />
+        <location filename="../gui/views/astrometry_setup.py" line="95" />
         <source>Pixelmaßstab:</source>
         <translation>Pixel scale:</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="65" />
+        <location filename="../gui/views/astrometry_setup.py" line="96" />
         <source>Suchradius:</source>
         <translation>Search radius:</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="66" />
+        <location filename="../gui/views/astrometry_setup.py" line="97" />
         <source>Grenzmagnitude (Gaia G):</source>
         <translation>Limiting magnitude (Gaia G):</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="67" />
+        <location filename="../gui/views/astrometry_setup.py" line="98" />
         <source>Match-Toleranz:</source>
         <translation>Match tolerance:</translation>
     </message>
     <message>
-        <location filename="../gui/views/astrometry_setup.py" line="72" />
+        <location filename="../gui/views/astrometry_setup.py" line="103" />
+        <source>Kein WCS im FITS-Header gefunden — bitte Feldzentrum und
+Pixelmaßstab manuell eingeben oder unten per Plate Solving bestimmen.</source>
+        <translation>No WCS found in the FITS header — please enter field centre and
+pixel scale manually, or determine them below via plate solving.</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="110" />
+        <source>Plate Solving (astrometry.net)</source>
+        <translation>Plate solving (astrometry.net)</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="117" />
+        <source>API-Schlüssel — kostenlos unter nova.astrometry.net/api_help</source>
+        <translation>API key — free at nova.astrometry.net/api_help</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="121" />
+        <source>Feldzentrum automatisch bestimmen</source>
+        <translation>Determine field centre automatically</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="170" />
+        <source>Kein API-Schlüssel</source>
+        <translation>No API key</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="172" />
+        <source>Für Plate Solving wird ein kostenloser API-Schlüssel von nova.astrometry.net benötigt.</source>
+        <translation>Plate solving needs a free API key from nova.astrometry.net.</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="221" />
+        <source>Gelöst: RA {ra:.5f}°, Dec {dec:.5f}°, {scale:.3f}″/px</source>
+        <translation>Solved: RA {ra:.5f}°, Dec {dec:.5f}°, {scale:.3f}″/px</translation>
+    </message>
+    <message>
+        <location filename="../gui/views/astrometry_setup.py" line="229" />
+        <source>Plate Solving fehlgeschlagen</source>
+        <translation>Plate solving failed</translation>
+    </message>
+    <message>
         <source>Kein WCS im FITS-Header gefunden — bitte Feldzentrum und
 Pixelmaßstab manuell eingeben.</source>
-        <translation>No WCS found in the FITS header — please enter field centre and
+        <translation type="vanished">No WCS found in the FITS header — please enter field centre and
 pixel scale manually.</translation>
     </message>
 </context>
@@ -140,120 +192,120 @@ The exposures need a DATE-OBS timestamp in the header — it is the basis of the
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../gui/main_window.py" line="94" />
+        <location filename="../gui/main_window.py" line="95" />
         <source>Kandidaten</source>
         <translation>Candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="103" />
-        <location filename="../gui/main_window.py" line="303" />
+        <location filename="../gui/main_window.py" line="104" />
+        <location filename="../gui/main_window.py" line="304" />
         <source>Astrometrie</source>
         <translation>Astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="116" />
+        <location filename="../gui/main_window.py" line="117" />
         <source>&amp;Datei</source>
         <translation>&amp;File</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="117" />
+        <location filename="../gui/main_window.py" line="118" />
         <source>FITS-Ordner öffnen...</source>
         <translation>Open FITS folder...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="122" />
+        <location filename="../gui/main_window.py" line="123" />
         <source>Beenden</source>
         <translation>Quit</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="126" />
+        <location filename="../gui/main_window.py" line="127" />
         <source>&amp;Projekt</source>
         <translation>&amp;Project</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="127" />
+        <location filename="../gui/main_window.py" line="128" />
         <source>Neues Projekt...</source>
         <translation>New project...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="131" />
+        <location filename="../gui/main_window.py" line="132" />
         <source>Projekt öffnen...</source>
         <translation>Open project...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="135" />
+        <location filename="../gui/main_window.py" line="136" />
         <source>Sitzung speichern</source>
         <translation>Save session</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="140" />
+        <location filename="../gui/main_window.py" line="141" />
         <source>Sterne erkennen &amp;&amp; ausrichten...</source>
         <translation>Detect stars &amp;&amp; align...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="145" />
+        <location filename="../gui/main_window.py" line="146" />
         <source>Kandidaten suchen...</source>
         <translation>Search candidates...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="151" />
+        <location filename="../gui/main_window.py" line="152" />
         <source>Astrometrie berechnen...</source>
         <translation>Compute astrometry...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="156" />
+        <location filename="../gui/main_window.py" line="157" />
         <source>MPC-Report exportieren...</source>
         <translation>Export MPC report...</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="161" />
+        <location filename="../gui/main_window.py" line="162" />
         <source>&amp;Ansicht</source>
         <translation>&amp;View</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="165" />
+        <location filename="../gui/main_window.py" line="166" />
         <source>Anordnung zurücksetzen</source>
         <translation>Reset layout</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="169" />
+        <location filename="../gui/main_window.py" line="170" />
         <source>&amp;Sprache</source>
         <translation>&amp;Language</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="180" />
+        <location filename="../gui/main_window.py" line="181" />
         <source>&amp;Hilfe</source>
         <translation>&amp;Help</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="181" />
+        <location filename="../gui/main_window.py" line="182" />
         <source>Logdatei anzeigen</source>
         <translation>Show log file</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="185" />
-        <location filename="../gui/main_window.py" line="240" />
+        <location filename="../gui/main_window.py" line="186" />
+        <location filename="../gui/main_window.py" line="241" />
         <source>Über STELLA</source>
         <translation>About STELLA</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="202" />
+        <location filename="../gui/main_window.py" line="203" />
         <source>Sprache geändert</source>
         <translation>Language changed</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="204" />
+        <location filename="../gui/main_window.py" line="205" />
         <source>Die Sprache wird beim nächsten Start von STELLA verwendet.</source>
         <translation>The language will be applied the next time STELLA starts.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="216" />
-        <location filename="../gui/main_window.py" line="233" />
+        <location filename="../gui/main_window.py" line="217" />
+        <location filename="../gui/main_window.py" line="234" />
         <source>Logdatei</source>
         <translation>Log file</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="217" />
+        <location filename="../gui/main_window.py" line="218" />
         <source>Noch keine Logdatei vorhanden.
 Erwartet unter:
 {path}</source>
@@ -262,126 +314,126 @@ Expected at:
 {path}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="234" />
+        <location filename="../gui/main_window.py" line="235" />
         <source>Die Logdatei liegt unter:
 {path}</source>
         <translation>The log file is located at:
 {path}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="242" />
+        <location filename="../gui/main_window.py" line="243" />
         <source>STELLA — Synthetic Tracking Engine for Locating &amp; Logging Asteroids
 Open-Source Synthetic-Tracking-Tool für Asteroiden-Detektion.</source>
         <translation>STELLA — Synthetic Tracking Engine for Locating &amp; Logging Asteroids
 Open-source synthetic tracking tool for asteroid detection.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="305" />
+        <location filename="../gui/main_window.py" line="306" />
         <source>bestätigte Kandidaten</source>
         <translation>confirmed candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="309" />
+        <location filename="../gui/main_window.py" line="310" />
         <source>fehlt: {what}</source>
         <translation>missing: {what}</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="309" />
+        <location filename="../gui/main_window.py" line="310" />
         <source> und </source>
         <translation> and </translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="324" />
+        <location filename="../gui/main_window.py" line="325" />
         <source>FITS-Ordner öffnen</source>
         <translation>Open FITS folder</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="342" />
+        <location filename="../gui/main_window.py" line="343" />
         <source>Ordner analysieren</source>
         <translation>Analysing folder</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="358" />
+        <location filename="../gui/main_window.py" line="359" />
         <source>Laden abgebrochen.</source>
         <translation>Loading cancelled.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="382" />
+        <location filename="../gui/main_window.py" line="383" />
         <source>FITS-Frames laden</source>
         <translation>Loading FITS frames</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="427" />
+        <location filename="../gui/main_window.py" line="428" />
         <source>Fehler beim Laden</source>
         <translation>Error while loading</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="436" />
+        <location filename="../gui/main_window.py" line="437" />
         <source>Sterne erkennen und ausrichten</source>
         <translation>Detecting stars and aligning</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="447" />
+        <location filename="../gui/main_window.py" line="448" />
         <source>Ausrichtung abgeschlossen.</source>
         <translation>Alignment complete.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="465" />
+        <location filename="../gui/main_window.py" line="466" />
         <source>Fehler bei der Ausrichtung</source>
         <translation>Error during alignment</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="492" />
+        <location filename="../gui/main_window.py" line="493" />
         <source>Kandidatensuche</source>
         <translation>Candidate search</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="506" />
+        <location filename="../gui/main_window.py" line="507" />
         <source>Keine Kandidaten gefunden.</source>
         <translation>No candidates found.</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="508" />
+        <location filename="../gui/main_window.py" line="509" />
         <source>keine Kandidaten</source>
         <translation>no candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="523" />
+        <location filename="../gui/main_window.py" line="524" />
         <source>Fehler bei der Kandidatensuche</source>
         <translation>Error during candidate search</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="544" />
+        <location filename="../gui/main_window.py" line="550" />
         <source>Astrometrie berechnen</source>
         <translation>Compute astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="570" />
+        <location filename="../gui/main_window.py" line="576" />
         <source>Fehler bei der Astrometrie</source>
         <translation>Error during astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="579" />
+        <location filename="../gui/main_window.py" line="585" />
         <source>Keine bestätigten Kandidaten</source>
         <translation>No confirmed candidates</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="586" />
+        <location filename="../gui/main_window.py" line="592" />
         <source>MPC-Report speichern</source>
         <translation>Save MPC report</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="586" />
+        <location filename="../gui/main_window.py" line="592" />
         <source>Textdateien (*.txt)</source>
         <translation>Text files (*.txt)</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="642" />
+        <location filename="../gui/main_window.py" line="666" />
         <source>Neues Projekt</source>
         <translation>New project</translation>
     </message>
     <message>
-        <location filename="../gui/main_window.py" line="642" />
+        <location filename="../gui/main_window.py" line="666" />
         <source>Projektname:</source>
         <translation>Project name:</translation>
     </message>
@@ -456,19 +508,19 @@ Open-source synthetic tracking tool for asteroid detection.</translation>
         <translation>Open</translation>
     </message>
     <message>
-        <location filename="../gui/views/results_table.py" line="189" />
-        <location filename="../gui/views/results_table.py" line="283" />
+        <location filename="../gui/views/results_table.py" line="192" />
+        <location filename="../gui/views/results_table.py" line="286" />
         <source>Keine Kandidaten.</source>
         <extracomment>Wird ausgelöst, wenn sich eine Bewertung ändert — der Export hängt davon ab. Verhindert, dass das Nachführen von Text und Farbe erneut itemChanged auslöst.</extracomment>
         <translation>No candidates.</translation>
     </message>
     <message>
-        <location filename="../gui/views/results_table.py" line="191" />
+        <location filename="../gui/views/results_table.py" line="194" />
         <source>Tastatur: J bestätigen · N verwerfen · 0 zurücksetzen — springt weiter.</source>
         <translation>Keyboard: J confirm · N reject · 0 reset — advances automatically.</translation>
     </message>
     <message>
-        <location filename="../gui/views/results_table.py" line="288" />
+        <location filename="../gui/views/results_table.py" line="291" />
         <source>{total} Kandidaten · {confirmed} bestätigt · {rejected} verworfen · {open} offen</source>
         <translation>{total} candidates · {confirmed} confirmed · {rejected} rejected · {open} open</translation>
     </message>
@@ -476,87 +528,88 @@ Open-source synthetic tracking tool for asteroid detection.</translation>
 <context>
     <name>SearchSetupDialog</name>
     <message>
-        <location filename="../gui/views/search_setup.py" line="40" />
+        <location filename="../gui/views/search_setup.py" line="61" />
         <source>Kandidaten suchen</source>
+        <extracomment>Startwerte für die Suchparameter, unabhängig vom Pixelmaßstab. Eigene Konstante, damit main_window.py dieselben Werte für die eingebauten Teleskop-Presets verwenden kann, statt sie ein zweites Mal hinzuschreiben.</extracomment>
         <translation>Search candidates</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="77" />
+        <location filename="../gui/views/search_setup.py" line="101" />
         <source>PyTorch-Batch verwenden (GPU falls verfügbar)</source>
         <translation>Use PyTorch batch (GPU if available)</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="82" />
+        <location filename="../gui/views/search_setup.py" line="106" />
         <source>Pixelmaßstab:</source>
         <translation>Pixel scale:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="83" />
+        <location filename="../gui/views/search_setup.py" line="107" />
         <source>Geschwindigkeit von:</source>
         <translation>Speed from:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="84" />
+        <location filename="../gui/views/search_setup.py" line="108" />
         <source>Geschwindigkeit bis:</source>
         <translation>Speed to:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="85" />
+        <location filename="../gui/views/search_setup.py" line="109" />
         <source>Geschwindigkeit-Schritt:</source>
         <translation>Speed step:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="86" />
+        <location filename="../gui/views/search_setup.py" line="110" />
         <source>Winkel-Schritt:</source>
         <translation>Angle step:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="87" />
+        <location filename="../gui/views/search_setup.py" line="111" />
         <source>SNR-Schwelle:</source>
         <translation>SNR threshold:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="96" />
+        <location filename="../gui/views/search_setup.py" line="120" />
         <source>Suche starten</source>
         <translation>Start search</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="97" />
+        <location filename="../gui/views/search_setup.py" line="121" />
         <source>Abbrechen</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="145" />
+        <location filename="../gui/views/search_setup.py" line="169" />
         <source>Laden</source>
         <translation>Load</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="147" />
+        <location filename="../gui/views/search_setup.py" line="171" />
         <source>Speichern als...</source>
         <translation>Save as...</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="151" />
+        <location filename="../gui/views/search_setup.py" line="175" />
         <source>Preset:</source>
         <translation>Preset:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="176" />
+        <location filename="../gui/views/search_setup.py" line="200" />
         <source>Preset speichern</source>
         <translation>Save preset</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="176" />
+        <location filename="../gui/views/search_setup.py" line="200" />
         <source>Name:</source>
         <translation>Name:</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="184" />
+        <location filename="../gui/views/search_setup.py" line="208" />
         <source>Preset gespeichert</source>
         <translation>Preset saved</translation>
     </message>
     <message>
-        <location filename="../gui/views/search_setup.py" line="185" />
+        <location filename="../gui/views/search_setup.py" line="209" />
         <source>Preset "{name}" gespeichert.</source>
         <translation>Preset "{name}" saved.</translation>
     </message>
@@ -631,32 +684,33 @@ In exchange the resolution is halved and the pixel scale doubles.</translation>
 <context>
     <name>WorkflowPanel</name>
     <message>
-        <location filename="../gui/views/workflow_panel.py" line="127" />
+        <location filename="../gui/views/workflow_panel.py" line="155" />
         <source>FITS-Ordner laden</source>
+        <extracomment>Dauer eines vollen Pulszyklus (hell -&gt; gedimmt -&gt; hell) in Millisekunden. Untere Deckkraft des Pulses. Nicht bis 0, sonst wirkt die Zeile kurz wie ausgeschaltet statt wie ein Atmen.</extracomment>
         <translation>Load FITS folder</translation>
     </message>
     <message>
-        <location filename="../gui/views/workflow_panel.py" line="128" />
+        <location filename="../gui/views/workflow_panel.py" line="156" />
         <source>Sterne erkennen &amp; ausrichten</source>
         <translation>Detect stars &amp; align</translation>
     </message>
     <message>
-        <location filename="../gui/views/workflow_panel.py" line="129" />
+        <location filename="../gui/views/workflow_panel.py" line="157" />
         <source>Kandidaten suchen</source>
         <translation>Search candidates</translation>
     </message>
     <message>
-        <location filename="../gui/views/workflow_panel.py" line="130" />
+        <location filename="../gui/views/workflow_panel.py" line="158" />
         <source>Astrometrie berechnen</source>
         <translation>Compute astrometry</translation>
     </message>
     <message>
-        <location filename="../gui/views/workflow_panel.py" line="131" />
+        <location filename="../gui/views/workflow_panel.py" line="159" />
         <source>MPC-Report exportieren</source>
         <translation>Export MPC report</translation>
     </message>
     <message>
-        <location filename="../gui/views/workflow_panel.py" line="139" />
+        <location filename="../gui/views/workflow_panel.py" line="167" />
         <source>Arbeitsablauf</source>
         <translation>Workflow</translation>
     </message>

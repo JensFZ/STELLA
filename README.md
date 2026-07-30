@@ -36,7 +36,8 @@ Ergebnisse zunächst kritisch gegenprüfen.
   wahlweise als NumPy/SciPy-Referenz oder gebatcht über PyTorch (CUDA/MPS, sonst CPU)
 - **Detektion**: SNR-Peak-Suche, Duplikatreduktion, sortierbare Kandidatenliste mit
   Vorschaubild und manueller Bestätigung
-- **Astrometrie**: Gaia-Abfrage, Cross-Matching, WCS-Fit mit Residuen-Anzeige
+- **Astrometrie**: Gaia-Abfrage, Cross-Matching, WCS-Fit mit Residuen-Anzeige; Feldzentrum
+  wahlweise per Plate Solving (astrometry.net) statt manueller Schätzung
 - **Export** im MPC-80-Spalten-Format, mit einer Beobachtungszeile je Frame
 - **Projekte**: Sitzungen und Suchparameter-Presets in SQLite. Für Seestar S50, S30 und
   S30 Pro liegt der Pixelmaßstab bereits als Preset vor, siehe unten.
@@ -90,7 +91,14 @@ aufbaut.
    als das gesuchte Objekt. Jeder Kandidat wird per Dropdown auf *Bestätigt* oder
    *Verworfen* gesetzt.
 5. **Projekt → Astrometrie berechnen** fragt Gaia ab und passt die WCS an. Das Feldzentrum
-   wird aus dem Header vorbelegt, sofern vorhanden. *Benötigt Internetzugang.*
+   wird aus dem Header vorbelegt, sofern vorhanden. *Benötigt Internetzugang.* Fehlt ein
+   WCS im Header — etwa bei Seestar-Rohframes —, lässt es sich per **Plate Solving**
+   (astrometry.net) blind aus dem erkannten Sternmuster bestimmen, statt es zu schätzen.
+   Dafür ist ein kostenloser API-Schlüssel von
+   [nova.astrometry.net/api_help](https://nova.astrometry.net/api_help) nötig; STELLA
+   registriert dieses Konto nicht selbst. Ist im Dialog ein Teleskop ausgewählt, geht
+   dessen Pixelmaßstab als Hinweis mit — das grenzt den durchsuchten Skalenbereich ein und
+   beschleunigt die Suche erheblich.
 6. **Projekt → MPC-Report exportieren** schreibt die bestätigten Kandidaten heraus, mit
    einer Zeile pro Frame.
 

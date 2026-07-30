@@ -530,7 +530,12 @@ class MainWindow(QMainWindow):
         reference_frame = self._registered[reference_index].frame
         prefill = estimate_field_center_and_scale(reference_frame.wcs, reference_frame.data.shape)
 
-        dialog = AstrometrySetupDialog(self, prefill=prefill)
+        dialog = AstrometrySetupDialog(
+            self,
+            prefill=prefill,
+            reference_stars=self._registered[reference_index].stars,
+            image_shape=reference_frame.data.shape,
+        )
         if dialog.exec() != AstrometrySetupDialog.DialogCode.Accepted:
             return
 

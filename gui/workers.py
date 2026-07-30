@@ -24,6 +24,7 @@ from core.io_fits import (
     scan_folder,
     select_frames_to_load,
 )
+from core.plate_solving import solve_plate
 from core.synthetic_tracking import build_velocity_grid, search_velocity_grid
 
 logger = logging.getLogger(__name__)
@@ -401,6 +402,63 @@ class DetectionWorker(QThread):
             )
         logger.info("Kandidatensuche gesamt %.1fs", time.perf_counter() - started)
         self.finished_detection.emit(detections)
+
+
+class PlateSolveWorker(QThread):
+    """Löst Feldzentrum und Pixelmaßstab blind über astrometry.net (core.plate_solving).
+
+    Der Netzwerk-Roundtrip kann bis zu solve_timeout dauern (Standard 120s) — im
+    UI-Thread liefe der Astrometrie-Dialog währenddessen komplett fest."""
+
+    status = Signal(str)
+    finished_solve = Signal(tuple)  # (ra_deg, dec_deg, pixel_scale_arcsec)
+    failed = Signal(str)
+
+    def __init__(
+        self,
+        pixel_x,
+        pixel_y,
+        image_shape: tuple[int, int],
+        api_key: str,
+        pixel_scale_arcsec: float | None,
+        parent: QObject | None = None,
+    ):
+        super().__init__(parent)
+        self._pixel_x = pixel_x
+        self._pixel_y = pixel_y
+        self._image_shape = image_shape
+        self._api_key = api_key
+        self._pixel_scale_arcsec = pixel_scale_arcsec
+
+    def run(self) -> None:
+        started = time.perf_counter()
+        self.status.emit("Sende Sternliste an astrometry.net ...")
+        logger.info(
+            "Starte Plate Solving: %d Sterne, Bild %s, Maßstab-Hinweis %s",
+            len(self._pixel_x),
+            self._image_shape,
+            self._pixel_scale_arcsec,
+        )
+        try:
+            result = solve_plate(
+                self._pixel_x,
+                self._pixel_y,
+                self._image_shape,
+                self._api_key,
+                pixel_scale_arcsec=self._pixel_scale_arcsec,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Hier landen auch Netzwerk- und Anmeldefehler; der Traceback zeigt, woran es lag.
+            logger.exception("Plate Solving fehlgeschlagen")
+            self.failed.emit(str(exc))
+            return
+
+        logger.info(
+            "Plate Solving erfolgreich in %.1fs: RA=%.5f° Dec=%.5f° Maßstab=%.3f arcsec/px",
+            time.perf_counter() - started,
+            *result,
+        )
+        self.finished_solve.emit(result)
 
 
 class AstrometryWorker(QThread):
